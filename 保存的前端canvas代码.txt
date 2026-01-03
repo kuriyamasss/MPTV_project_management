@@ -1,0 +1,1593 @@
+import React, { useState, useMemo, useEffect, useRef, useContext, createContext } from 'react';
+import { 
+  Layout, Kanban, Calendar, Clock, MoreHorizontal, 
+  Plus, Search, User, LogOut, ChevronLeft, GripVertical,
+  Table as TableIcon, ChevronDown, ChevronRight, ZoomIn, ZoomOut,
+  Paperclip, FileText, Upload, Link as LinkIcon, LayoutGrid, List,
+  Folder, ArrowRight, Lock, Mail, CheckCircle2, Menu, X, Trash2, Calendar as CalendarIcon,
+  File, Download, Eye, FileDigit, ArrowLeft, Briefcase, FileBarChart, Shuffle, Archive, Settings,
+  Globe, Sun, Moon, UserCog
+} from 'lucide-react';
+
+// --- 0. 配置与上下文 (i18n & Theme) ---
+
+type Language = 'zh' | 'vi';
+type Theme = 'light' | 'dark';
+
+const TRANSLATIONS = {
+  zh: {
+    appName: "MPTV 项目管理",
+    login: "登录",
+    register: "注册",
+    username: "用户名",
+    password: "密码",
+    email: "邮箱",
+    dashboard: "仪表盘",
+    projectFiles: "项目文件",
+    archives: "归档",
+    search: "搜索...",
+    newProject: "新建项目",
+    weeklyReport: "周报",
+    welcome: "欢迎",
+    logout: "退出",
+    projects: "项目",
+    files: "文件",
+    upload: "上传",
+    download: "下载",
+    settings: "设置",
+    save: "保存",
+    cancel: "取消",
+    delete: "删除",
+    createTask: "新建任务",
+    editTask: "编辑任务",
+    taskTitle: "任务标题",
+    description: "描述",
+    priority: "优先级",
+    assignee: "负责人",
+    planStart: "计划开始",
+    planEnd: "计划结束",
+    actStart: "实际开始",
+    actEnd: "实际结束",
+    parentTask: "父任务",
+    nextTask: "后续关联任务",
+    attachments: "附件",
+    active: "活跃",
+    inactive: "归档/不活跃",
+    status: "状态",
+    selectProjects: "选择包含的项目",
+    invertSelection: "反选",
+    generate: "生成报告",
+    startDate: "开始日期",
+    endDate: "结束日期",
+    previewMode: "演示模式：任意账号密码即可登录",
+    mockAction: "仅为演示功能",
+    allProjects: "所有项目",
+    noFiles: "暂无文件",
+    invert: "反选",
+    downloadSelected: "批量下载",
+    editProfile: "修改资料",
+    updateProfile: "更新个人信息",
+    newPassword: "新密码 (留空不修改)",
+    profileUpdated: "个人资料已更新"
+  },
+  vi: {
+    appName: "Quản lý dự án MPTV",
+    login: "Đăng nhập",
+    register: "Đăng ký",
+    username: "Tên đăng nhập",
+    password: "Mật khẩu",
+    email: "Email",
+    dashboard: "Bảng điều khiển",
+    projectFiles: "Tài liệu dự án",
+    archives: "Lưu trữ",
+    search: "Tìm kiếm...",
+    newProject: "Dự án mới",
+    weeklyReport: "Báo cáo tuần",
+    welcome: "Xin chào",
+    logout: "Đăng xuất",
+    projects: "Dự án",
+    files: "Tập tin",
+    upload: "Tải lên",
+    download: "Tải xuống",
+    settings: "Cài đặt",
+    save: "Lưu",
+    cancel: "Hủy",
+    delete: "Xóa",
+    createTask: "Tạo nhiệm vụ",
+    editTask: "Sửa nhiệm vụ",
+    taskTitle: "Tiêu đề",
+    description: "Mô tả",
+    priority: "Độ ưu tiên",
+    assignee: "Người thực hiện",
+    planStart: "Kế hoạch bắt đầu",
+    planEnd: "Kế hoạch kết thúc",
+    actStart: "Thực tế bắt đầu",
+    actEnd: "Thực tế kết thúc",
+    parentTask: "Nhiệm vụ cha",
+    nextTask: "Nhiệm vụ liên quan",
+    attachments: "Đính kèm",
+    active: "Hoạt động",
+    inactive: "Lưu trữ/Không hoạt động",
+    status: "Trạng thái",
+    selectProjects: "Chọn dự án",
+    invertSelection: "Đảo ngược chọn",
+    generate: "Tạo báo cáo",
+    startDate: "Ngày bắt đầu",
+    endDate: "Ngày kết thúc",
+    previewMode: "Chế độ xem trước: Đăng nhập bằng bất kỳ tài khoản nào",
+    mockAction: "Chỉ là mô phỏng",
+    allProjects: "Tất cả dự án",
+    noFiles: "Không có tập tin",
+    invert: "Đảo ngược",
+    downloadSelected: "Tải xuống đã chọn",
+    editProfile: "Chỉnh sửa hồ sơ",
+    updateProfile: "Cập nhật hồ sơ",
+    newPassword: "Mật khẩu mới (Để trống nếu không đổi)",
+    profileUpdated: "Hồ sơ đã được cập nhật"
+  }
+};
+
+const ConfigContext = createContext<{
+  lang: Language;
+  setLang: (l: Language) => void;
+  theme: Theme;
+  setTheme: (t: Theme) => void;
+  t: (typeof TRANSLATIONS)['zh'];
+}>({
+  lang: 'zh',
+  setLang: () => {},
+  theme: 'light',
+  setTheme: () => {},
+  t: TRANSLATIONS.zh
+});
+
+const useConfig = () => useContext(ConfigContext);
+
+// --- 1. 类型定义 ---
+type Priority = 'high' | 'medium' | 'low';
+type ProjectStatus = 'active' | 'inactive';
+
+interface Task {
+  id: number;
+  title: string;
+  description: string;
+  priority: Priority;
+  start_date: string; // ISO String (Planned)
+  end_date: string;   // ISO String (Planned)
+  actual_start_date?: string;
+  actual_end_date?: string;
+  progress: number;
+  parent_id?: number;
+  related_task_id?: number; // 新增：关联的后续任务ID
+  remarks?: string;
+  assignee?: string;
+  attachments?: string[]; // 附件列表
+}
+
+interface Column {
+  id: number;
+  name: string;
+  tasks: Task[];
+}
+
+interface Project {
+  id: number;
+  name: string;
+  description: string;
+  status: ProjectStatus;
+  created_at: string;
+  columns: Column[];
+}
+
+interface UserProfile {
+  username: string;
+  email: string;
+}
+
+// --- 2. 模拟数据 (Mock Data) ---
+const INITIAL_DATA: Project[] = [
+  {
+    id: 1,
+    name: 'ERP System Refactor',
+    description: 'Migration of core business processes and performance optimization.',
+    status: 'active',
+    created_at: '2024-01-01T00:00:00.000Z',
+    columns: [
+      {
+        id: 101,
+        name: 'To Do',
+        tasks: [
+          { 
+            id: 1001, title: 'Database Migration Plan', description: 'Design new schema', priority: 'high', 
+            start_date: '2024-01-05T00:00:00.000Z', end_date: '2024-01-10T00:00:00.000Z', 
+            actual_start_date: '2024-01-06T00:00:00.000Z', actual_end_date: '2024-01-09T00:00:00.000Z', 
+            progress: 100, assignee: 'Alice', remarks: 'Need server access', attachments: ['schema_v1.sql'],
+            related_task_id: 1002 // 关联到下一个任务
+          },
+          { 
+            id: 1002, title: 'Backup Legacy Data', description: 'Full backup', priority: 'high', 
+            start_date: '2024-01-11T00:00:00.000Z', end_date: '2024-01-12T00:00:00.000Z', 
+            actual_start_date: '2024-01-10T00:00:00.000Z', actual_end_date: '2024-01-11T00:00:00.000Z', 
+            progress: 100, assignee: 'Bob', parent_id: 1001, remarks: '500GB archived', attachments: ['backup_logs.txt']
+          },
+        ]
+      },
+      {
+        id: 102,
+        name: 'In Progress',
+        tasks: [
+          { 
+            id: 1003, title: 'Docker Environment', description: 'Setup dev containers', priority: 'medium', 
+            start_date: '2024-01-13T00:00:00.000Z', end_date: '2024-01-20T00:00:00.000Z', 
+            actual_start_date: '2024-01-12T00:00:00.000Z', actual_end_date: '', 
+            progress: 60, assignee: 'Dave', remarks: 'Redis image is slow' 
+          },
+        ]
+      },
+      {
+        id: 103,
+        name: 'Done',
+        tasks: []
+      },
+      {
+        id: 104,
+        name: "Won't Do / 无需执行",
+        tasks: []
+      }
+    ]
+  },
+  {
+    id: 2,
+    name: 'Company Website Redesign',
+    description: 'Modernize the brand look and feel.',
+    status: 'active',
+    created_at: '2023-12-15T00:00:00.000Z',
+    columns: [
+      { id: 201, name: 'Backlog', tasks: [] },
+      { id: 202, name: 'Design', tasks: [{ id: 2001, title: 'Homepage Hero', description: '', priority: 'high', start_date: '2024-01-10T00:00:00.000Z', end_date: '2024-01-15T00:00:00.000Z', progress: 0, attachments: ['mockup_v2.pdf'] }] },
+      { id: 203, name: "Won't Do", tasks: [] }
+    ]
+  },
+  ...Array.from({ length: 25 }).map((_, i) => ({
+      id: i + 3,
+      name: `Project Alpha ${2020 + i}`,
+      description: `Ongoing development iteration ${2020 + i}`,
+      status: 'active' as ProjectStatus,
+      created_at: new Date(2020 + i, 0, 1).toISOString(),
+      columns: []
+  }))
+];
+
+// --- 3. 共享组件 ---
+
+const PriorityTag = ({ p }: { p: string }) => {
+  const styles: any = { 
+    high: "bg-red-50 text-red-700 border-red-100 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800", 
+    medium: "bg-orange-50 text-orange-700 border-orange-100 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800", 
+    low: "bg-green-50 text-green-700 border-green-100 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800" 
+  };
+  return (
+    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${styles[p] || styles.medium}`}>
+      {p}
+    </span>
+  );
+};
+
+const Avatar = ({ name }: { name?: string }) => (
+  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900 dark:text-indigo-300 flex items-center justify-center text-[10px] font-bold border border-indigo-200 dark:border-indigo-700 shadow-sm shrink-0">
+    {name ? name[0] : <User size={12} />}
+  </div>
+);
+
+// 通用配置控件（主题/语言切换）
+const ConfigControls = () => {
+  const { lang, setLang, theme, setTheme } = useConfig();
+  
+  return (
+    <div className="flex items-center gap-2">
+      {/* Theme Switcher */}
+      <button 
+        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+        className="p-2 rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700 transition-colors"
+        title={theme === 'light' ? 'Dark Mode' : 'Light Mode'}
+      >
+        {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+      </button>
+
+      {/* Language Switcher */}
+      <button 
+        onClick={() => setLang(lang === 'zh' ? 'vi' : 'zh')}
+        className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 transition-colors text-sm font-medium"
+      >
+        <Globe size={18} />
+        {lang === 'zh' ? 'CN' : 'VN'}
+      </button>
+    </div>
+  );
+};
+
+const FilePreviewModal = ({ file, onClose }: { file: string | null, onClose: () => void }) => {
+  if (!file) return null;
+  const isPdf = file.toLowerCase().endsWith('.pdf');
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl w-full max-w-4xl h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200">
+        <div className="flex justify-between items-center p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2">
+             <FileText className="text-blue-600 dark:text-blue-400" />
+             <h3 className="font-bold text-gray-800 dark:text-gray-100">{file}</h3>
+          </div>
+          <div className="flex items-center gap-2">
+             <button className="p-2 text-gray-500 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1 text-sm font-medium">
+               <Download size={16} /> Download
+             </button>
+             <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+               <X size={20} />
+             </button>
+          </div>
+        </div>
+        <div className="flex-1 bg-gray-100 dark:bg-gray-900 p-8 overflow-auto flex items-center justify-center">
+          {isPdf ? (
+            <div className="w-full h-full bg-white dark:bg-gray-800 shadow-lg flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 border border-gray-300 dark:border-gray-700">
+              <FileText size={64} className="mb-4 text-gray-300 dark:text-gray-600" />
+              <p className="text-lg font-medium text-gray-500 dark:text-gray-400">PDF Preview Simulation</p>
+              <p className="text-sm text-gray-400 mt-2">{file}</p>
+              <div className="mt-8 w-3/4 h-64 bg-gray-50 dark:bg-gray-900 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg flex items-center justify-center">
+                 [ Document Content Placeholder ]
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 dark:text-gray-400">
+              <File size={64} className="mx-auto mb-4 text-gray-300 dark:text-gray-600" />
+              <p>Preview not available for this file type.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 修改用户资料模态框 ---
+const ProfileModal = ({ user, onClose, onSave }: { user: UserProfile, onClose: () => void, onSave: (u: any) => void }) => {
+    const [formData, setFormData] = useState({ username: user.username, email: user.email, password: '', confirmPassword: '' });
+    const { t } = useConfig();
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (formData.password && formData.password !== formData.confirmPassword) {
+            alert("Passwords do not match");
+            return;
+        }
+        onSave({ username: formData.username, email: formData.email });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-gray-100">
+                        <UserCog size={24} className="text-blue-600" /> {t.updateProfile}
+                    </h2>
+                    <button onClick={onClose}><X size={20} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"/></button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.username}</label>
+                        <div className="relative">
+                            <User className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                            <input className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} required />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.email}</label>
+                        <div className="relative">
+                            <Mail className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                            <input type="email" className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+                        </div>
+                    </div>
+                    <div className="pt-2 border-t border-gray-100 dark:border-gray-700">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.newPassword}</label>
+                        <div className="relative mb-3">
+                            <Lock className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                            <input type="password" placeholder="New Password" className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+                        </div>
+                        <div className="relative">
+                            <Lock className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                            <input type="password" placeholder="Confirm Password" className="w-full pl-9 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" value={formData.confirmPassword} onChange={e => setFormData({...formData, confirmPassword: e.target.value})} />
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t.cancel}</button>
+                        <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm">{t.save}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+const AppLayout = ({ children, user, logout, navigate, currentView, setCurrentView, onUpdateUser }: any) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const { t } = useConfig();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col font-sans text-gray-900 dark:text-gray-100 transition-colors duration-200">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              <div className="flex-shrink-0 flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+                <div className="bg-blue-600 p-1.5 rounded-lg shadow-sm">
+                  <Layout className="text-white w-5 h-5" />
+                </div>
+                <span className="font-bold text-lg text-gray-800 dark:text-gray-100 tracking-tight">{t.appName}</span>
+              </div>
+              <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
+                <button onClick={() => setCurrentView('dashboard')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${currentView === 'dashboard' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200'}`}>{t.dashboard}</button>
+                <button onClick={() => setCurrentView('files')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${currentView === 'files' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200'}`}>{t.projectFiles}</button>
+                <button onClick={() => setCurrentView('archives')} className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${currentView === 'archives' ? 'border-blue-500 text-gray-900 dark:text-white' : 'border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 hover:text-gray-700 dark:hover:text-gray-200'}`}>{t.archives}</button>
+              </div>
+            </div>
+            <div className="hidden sm:ml-6 sm:flex sm:items-center gap-4">
+               {/* Language & Theme Controls */}
+               <ConfigControls />
+
+               <div className="h-6 w-px bg-gray-200 dark:bg-gray-700 mx-2"></div>
+
+               {/* User Dropdown */}
+               <div className="relative" ref={dropdownRef}>
+                    <button 
+                        onClick={() => setUserMenuOpen(!userMenuOpen)} 
+                        className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 text-white flex items-center justify-center font-bold text-xs shadow-sm">{user?.username?.[0]?.toUpperCase() || "U"}</div>
+                        <span className="font-medium max-w-[100px] truncate">{user?.username}</span>
+                        <ChevronDown size={14} className={`transition-transform duration-200 ${userMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {userMenuOpen && (
+                        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-100 dark:border-gray-700 py-1 z-50 animate-in fade-in zoom-in duration-200 origin-top-right ring-1 ring-black ring-opacity-5 focus:outline-none">
+                            <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{user?.username}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{user?.email}</p>
+                            </div>
+                            <button 
+                                onClick={() => { setShowProfileModal(true); setUserMenuOpen(false); }} 
+                                className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2 transition-colors"
+                            >
+                                <UserCog size={16} className="text-blue-500" /> {t.editProfile}
+                            </button>
+                            <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
+                            <button 
+                                onClick={logout} 
+                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-colors"
+                            >
+                                <LogOut size={16} /> {t.logout}
+                            </button>
+                        </div>
+                    )}
+               </div>
+            </div>
+            <div className="-mr-2 flex items-center sm:hidden">
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+                {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+      
+      {showProfileModal && (
+          <ProfileModal 
+              user={user} 
+              onClose={() => setShowProfileModal(false)} 
+              onSave={(updatedData) => {
+                  onUpdateUser(updatedData);
+                  setShowProfileModal(false);
+              }} 
+          />
+      )}
+    </div>
+  );
+};
+
+// --- 4. 核心视图组件 ---
+const KanbanBoard = ({ project, setProject, onAddTask, onEditTask }: { project: Project, setProject: any, onAddTask: (colId: number) => void, onEditTask: (task: Task) => void }) => {
+  const [draggedTask, setDraggedTask] = useState<{task: Task, sourceColId: number} | null>(null);
+  const { t } = useConfig();
+  const handleDrop = (targetColId: number) => {
+    if (!draggedTask) return;
+    const newProject = { ...project };
+    const sourceCol = newProject.columns.find(c => c.id === draggedTask.sourceColId);
+    const targetCol = newProject.columns.find(c => c.id === targetColId);
+    if (sourceCol && targetCol) {
+      sourceCol.tasks = sourceCol.tasks.filter(t => t.id !== draggedTask.task.id);
+      targetCol.tasks.push({ ...draggedTask.task });
+      setProject(newProject);
+    }
+    setDraggedTask(null);
+  };
+  return (
+    <div className="flex gap-6 h-full overflow-x-auto pb-4 items-start px-1">
+      {project.columns.map((column) => (
+        <div key={column.id} className="flex-shrink-0 w-80 flex flex-col bg-gray-100/50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 max-h-full transition-colors" onDragOver={(e) => e.preventDefault()} onDrop={() => handleDrop(column.id)}>
+          <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50 rounded-t-xl">
+            <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm flex items-center gap-2">{column.name}<span className="bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-gray-600 text-xs px-2 py-0.5 rounded-full shadow-sm">{column.tasks.length}</span></h3>
+            <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal size={16}/></button>
+          </div>
+          <div className="p-2 flex-1 overflow-y-auto min-h-[150px] space-y-2">
+            {column.tasks.map((task) => (
+              <div key={task.id} draggable onDragStart={() => setDraggedTask({ task, sourceColId: column.id })} onClick={() => onEditTask(task)} className="bg-white dark:bg-gray-700 p-3 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm group hover:shadow-md transition-all cursor-pointer active:cursor-grabbing hover:border-blue-300 dark:hover:border-blue-500">
+                <div className="flex justify-between items-start mb-2"><PriorityTag p={task.priority} />{task.parent_id && <span className="text-[10px] bg-slate-100 dark:bg-gray-600 text-slate-500 dark:text-slate-300 px-1.5 py-0.5 rounded">Sub-task</span>}</div>
+                <h4 className="font-medium text-gray-800 dark:text-gray-100 text-sm mb-3 leading-snug">{task.title}</h4>
+                <div className="flex justify-between items-center pt-2 border-t border-gray-50 dark:border-gray-600">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-400"><Clock size={12} />{task.end_date ? new Date(task.end_date).toLocaleDateString() : "--"}</div><Avatar name={task.assignee} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => onAddTask(column.id)} className="m-2 py-2 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700 rounded-lg transition-colors border border-dashed border-gray-300 dark:border-gray-600"><Plus size={14} /> {t.createTask}</button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const GanttView = ({ project, setProject, onPreviewFile, onEditTask }: { project: Project, setProject: any, onPreviewFile: (file: string) => void, onEditTask: (task: Task) => void }) => {
+  const [zoomLevel, setZoomLevel] = useState<"day" | "week" | "month">("day");
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set([1001]));
+  const [dragState, setDragState] = useState<any>(null);
+  
+  const [linkingTask, setLinkingTask] = useState<{ id: number, x: number, y: number } | null>(null);
+  const [mousePos, setMousePos] = useState<{x:number, y:number} | null>(null);
+
+  const [hoveredTask, setHoveredTask] = useState<{task: Task, x: number, y: number} | null>(null);
+  const hoverTimeoutRef = useRef<any>(null);
+
+  const tasks = useMemo(() => {
+    const all = project.columns.flatMap(c => c.tasks).filter(t => t.start_date && t.end_date);
+    all.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+    const map = new Map();
+    all.forEach(t => map.set(t.id, { ...t, children: [], level: 0 }));
+    const roots: any[] = [];
+    all.forEach(t => {
+      if (t.parent_id && map.has(t.parent_id)) {
+        const p = map.get(t.parent_id);
+        map.get(t.id).level = p.level + 1;
+        p.children.push(map.get(t.id));
+      } else {
+        roots.push(map.get(t.id));
+      }
+    });
+    const flat: any[] = [];
+    const traverse = (nodes: any[]) => nodes.forEach(n => { flat.push(n); if (n.children.length) traverse(n.children); });
+    traverse(roots);
+    return flat;
+  }, [project]);
+
+  const visibleTasks = tasks.filter((t: any) => !t.parent_id || expandedIds.has(t.parent_id));
+
+  const config = useMemo(() => {
+    if (zoomLevel === "week") return { colWidth: 24, cols: 60, dayStep: 1, labelStep: 7 };
+    if (zoomLevel === "month") return { colWidth: 12, cols: 90, dayStep: 1, labelStep: 30 };
+    return { colWidth: 40, cols: 30, dayStep: 1, labelStep: 1 };
+  }, [zoomLevel]);
+
+  const minDate = new Date("2024-01-01"); 
+  const days = Array.from({ length: config.cols }, (_, i) => { 
+    const d = new Date(minDate); d.setDate(d.getDate() + i * config.dayStep); return d; 
+  });
+
+  const getOffset = (d: string) => {
+    const date = new Date(d);
+    if (isNaN(date.getTime())) return 0;
+    return ((date.getTime() - minDate.getTime()) / (86400000)) * config.colWidth;
+  };
+  const getWidth = (s: string, e: string | undefined) => {
+    const sDate = new Date(s);
+    let eDate = e ? new Date(e) : new Date(s);
+    if (isNaN(eDate.getTime())) eDate = new Date(s);
+    if (isNaN(sDate.getTime()) || isNaN(eDate.getTime())) return 0;
+    return Math.max(1, ((eDate.getTime() - sDate.getTime()) / 86400000) + 1) * config.colWidth;
+  };
+  const addDays = (d: string, n: number) => { 
+    const x = new Date(d); 
+    if (isNaN(x.getTime())) return new Date().toISOString();
+    x.setDate(x.getDate() + n); 
+    return x.toISOString(); 
+  };
+  const getDaysDiff = (start: string, end: string | undefined) => {
+      const s = new Date(start);
+      const e = end ? new Date(end) : new Date(start);
+      if (isNaN(s.getTime()) || isNaN(e.getTime())) return 0;
+      return Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  };
+
+  const handleMouseEnter = (task: Task, e: React.MouseEvent) => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setHoveredTask({ task, x: e.clientX, y: e.clientY });
+  };
+  const handleMouseLeave = () => {
+    hoverTimeoutRef.current = setTimeout(() => setHoveredTask(null), 300);
+  };
+
+  const updateTask = (id: number, updates: any) => {
+    const np = { ...project };
+    np.columns.forEach(c => {
+      const t = c.tasks.find(x => x.id === id);
+      if (t) Object.assign(t, updates);
+    });
+    setProject(np);
+  };
+
+  useEffect(() => {
+    const move = (e: MouseEvent) => {
+      if (linkingTask) {
+        const svg = document.getElementById('gantt-svg');
+        if (svg) {
+            const rect = svg.getBoundingClientRect();
+            setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+        }
+      }
+      if (!dragState) return;
+      const dx = Math.round((e.clientX - dragState.sx) / config.colWidth);
+      if (dx === 0) return;
+      if (dragState.type === "move") {
+        updateTask(dragState.tid, { actual_start_date: addDays(dragState.os, dx), actual_end_date: addDays(dragState.oe, dx) });
+      }
+    };
+    const up = () => {
+        setDragState(null);
+        setLinkingTask(null);
+        setMousePos(null);
+    };
+    window.addEventListener("mousemove", move); 
+    window.addEventListener("mouseup", up);
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); }
+  }, [dragState, config, linkingTask]);
+
+  const startLinking = (e: React.MouseEvent, task: Task, type: 'start'|'end') => {
+      e.stopPropagation();
+      e.preventDefault();
+      const svg = document.getElementById('gantt-svg');
+      if (svg) {
+        const rect = svg.getBoundingClientRect();
+        const pl = getOffset(task.start_date);
+        const pw = getWidth(task.start_date, task.end_date);
+        const rowIndex = visibleTasks.findIndex(t => t.id === task.id);
+        const y = (rowIndex * 48) + 24; 
+        const x = type === 'end' ? pl + pw : pl; 
+        setLinkingTask({ id: task.id, x, y });
+        setMousePos({ x, y });
+      }
+  };
+
+  const finishLinking = (e: React.MouseEvent, targetTask: Task) => {
+      e.stopPropagation();
+      if (linkingTask && linkingTask.id !== targetTask.id) {
+          updateTask(linkingTask.id, { related_task_id: targetTask.id });
+          setLinkingTask(null);
+          setMousePos(null);
+      }
+  };
+
+  const drawPath = (x1: number, y1: number, x2: number, y2: number) => {
+      const midX = (x1 + x2) / 2;
+      return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm flex flex-col h-full overflow-hidden relative">
+      {hoveredTask && !linkingTask && !dragState && (
+         <div className="fixed z-[9999] bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-600 rounded-lg p-4 w-64 animate-in fade-in zoom-in duration-200 pointer-events-none" style={{ left: hoveredTask.x + 20, top: Math.min(hoveredTask.y, window.innerHeight - 200) }}>
+            <h4 className="font-bold text-gray-900 dark:text-gray-100 mb-2">{hoveredTask.task.title}</h4>
+            <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
+               <div className="flex items-center gap-2"><Avatar name={hoveredTask.task.assignee} /><span>{hoveredTask.task.assignee || "Unassigned"}</span></div>
+               {hoveredTask.task.remarks && <div className="bg-gray-50 dark:bg-gray-700 p-2 rounded border border-gray-100 dark:border-gray-600 italic">{hoveredTask.task.remarks}</div>}
+               {hoveredTask.task.attachments && hoveredTask.task.attachments.length > 0 && <div className="border-t border-gray-100 dark:border-gray-700 pt-2"><span className="font-semibold text-gray-700 dark:text-gray-300 block mb-1">Attachments:</span><ul className="space-y-1">{hoveredTask.task.attachments.map((file, i) => (<li key={i} className="flex items-center gap-2 text-blue-600 dark:text-blue-400"><Paperclip size={10}/> {file}</li>))}</ul></div>}
+            </div>
+         </div>
+      )}
+
+      <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 flex justify-between items-center">
+        <div className="flex gap-4 text-xs font-medium text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-2"><span className="w-3 h-3 bg-gray-200 dark:bg-gray-600 rounded-sm border border-gray-300 dark:border-gray-500"></span> Planned</div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 bg-blue-500 rounded-sm"></span> Actual</div>
+        </div>
+        <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+          {["day", "week", "month"].map((m: any) => (
+            <button key={m} onClick={() => setZoomLevel(m)} className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-all ${zoomLevel===m ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>{m}</button>
+          ))}
+        </div>
+      </div>
+      
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-64 border-r border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-800 z-10 shadow-sm">
+          <div className="h-10 border-b border-gray-100 dark:border-gray-700 flex items-center px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-50/30 dark:bg-gray-700/30">Task Name</div>
+          <div className="overflow-y-hidden flex-1">
+            {visibleTasks.map((t: any) => (
+              <div key={t.id} className="h-12 flex items-center px-4 border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm text-gray-700 dark:text-gray-200 group cursor-pointer" style={{ paddingLeft: `${16 + t.level * 16}px` }} onMouseEnter={(e) => handleMouseEnter(t, e)} onMouseLeave={handleMouseLeave} onClick={() => onEditTask(t)}>
+                <button onClick={(e) => { e.stopPropagation(); const s = new Set(expandedIds); s.has(t.id)?s.delete(t.id):s.add(t.id); setExpandedIds(new Set(s)); }} className={`mr-2 p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 ${!t.children.length && "invisible"}`}>
+                  {expandedIds.has(t.id)?<ChevronDown size={14}/>:<ChevronRight size={14}/>}
+                </button>
+                <span className="truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{t.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="flex-1 overflow-auto relative bg-white dark:bg-gray-800">
+          <div className="h-10 flex border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20 bg-gray-50/90 dark:bg-gray-800/90 backdrop-blur w-max">
+            {days.map((d, i) => (
+              <div key={i} className="flex-shrink-0 border-r border-gray-100/50 dark:border-gray-700/50 flex flex-col justify-center items-center text-[10px] text-gray-400 select-none" style={{ width: config.colWidth }}>
+                {i % config.labelStep === 0 && <span className="font-medium text-gray-600 dark:text-gray-400">{d.getDate()}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="w-max relative pt-1" style={{ minHeight: visibleTasks.length * 48 }}>
+            
+            <svg id="gantt-svg" className="absolute inset-0 pointer-events-none z-0" style={{ width: '100%', height: '100%' }}>
+                {visibleTasks.map((t:any, idx) => {
+                    if (t.related_task_id) {
+                        const target = visibleTasks.find((x:any) => x.id === t.related_task_id);
+                        if (target) {
+                            const tIdx = visibleTasks.findIndex((x:any) => x.id === target.id);
+                            const startX = getOffset(t.start_date) + getWidth(t.start_date, t.end_date);
+                            const startY = (idx * 48) + 24;
+                            const endX = getOffset(target.start_date);
+                            const endY = (tIdx * 48) + 24;
+                            return <path key={`link-${t.id}`} d={drawPath(startX, startY, endX, endY)} stroke="#cbd5e1" strokeWidth="2" fill="none" markerEnd="url(#arrowhead)" />;
+                        }
+                    }
+                    return null;
+                })}
+                {linkingTask && mousePos && (
+                    <path d={drawPath(linkingTask.x, linkingTask.y, mousePos.x, mousePos.y)} stroke="#3b82f6" strokeWidth="2" fill="none" strokeDasharray="5,5" />
+                )}
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
+                    </marker>
+                </defs>
+            </svg>
+
+            <div className="absolute inset-0 flex pointer-events-none">{days.map((_, i) => <div key={i} className="border-r border-gray-50 dark:border-gray-700 h-full" style={{ width: config.colWidth }}></div>)}</div>
+            
+            {visibleTasks.map((t: any) => {
+                const pl = getOffset(t.start_date); const pw = getWidth(t.start_date, t.end_date);
+                const al = t.actual_start_date ? getOffset(t.actual_start_date) : 0;
+                const aw = t.actual_start_date ? getWidth(t.actual_start_date, t.actual_end_date) : 0;
+                const duration = t.actual_start_date ? getDaysDiff(t.actual_start_date, t.actual_end_date) : 0;
+                
+                return (
+                  <div key={t.id} className="h-12 relative border-b border-gray-50/50 dark:border-gray-700/50 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 w-full group">
+                    <div 
+                        className="absolute top-2 h-7 bg-gray-100 dark:bg-gray-600 border border-gray-200 dark:border-gray-500 rounded flex items-center" 
+                        style={{ left: pl, width: pw }}
+                    >
+                         <div 
+                            onMouseDown={(e) => startLinking(e, t, 'end')}
+                            className="absolute -right-2 top-1/2 -translate-y-1/2 w-3 h-3 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-500 rounded-full cursor-crosshair opacity-0 group-hover:opacity-100 hover:scale-125 hover:border-blue-500 z-20"
+                         />
+                         <div 
+                            onMouseUp={(e) => finishLinking(e, t)}
+                            className="absolute -left-3 top-0 bottom-0 w-4 z-20 cursor-pointer"
+                         />
+                    </div>
+                    {t.actual_start_date && (
+                      <div 
+                        onMouseDown={(e) => setDragState({tid: t.id, type:"move", sx:e.clientX, os:t.actual_start_date, oe:t.actual_end_date})}
+                        className={`absolute top-4 h-3 rounded shadow-sm text-[9px] text-white flex items-center justify-center cursor-grab active:cursor-grabbing hover:brightness-110 transition-all z-10 ${t.progress===100?"bg-emerald-500":"bg-blue-600"}`}
+                        style={{ left: al, width: Math.max(aw, 8) }}
+                      >
+                        {aw > 40 && `${duration}d`}
+                      </div>
+                    )}
+                  </div>
+                );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const TableView = ({ project, setProject }: { project: Project, setProject: any }) => {
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set([1001]));
+  const { t } = useConfig();
+  
+  const tasks = useMemo(() => {
+    const all = project.columns.flatMap(c => c.tasks);
+    const map = new Map(); all.forEach(t => map.set(t.id, { ...t, children: [], level: 0 }));
+    const roots: any[] = []; all.forEach(t => { if (t.parent_id && map.has(t.parent_id)) { map.get(t.parent_id).children.push(map.get(t.id)); map.get(t.id).level = map.get(t.parent_id).level + 1; } else roots.push(map.get(t.id)); });
+    const flat: any[] = []; const traverse = (nodes: any[]) => nodes.forEach(n => { flat.push(n); if (n.children.length) traverse(n.children); }); traverse(roots); return flat;
+  }, [project]);
+
+  const visible = tasks.filter((t: any) => !t.parent_id || expandedIds.has(t.parent_id));
+
+  const update = (id: number, f: string, v: any) => {
+    const np = { ...project };
+    np.columns.forEach(c => { const t = c.tasks.find(x => x.id===id); if(t) (t as any)[f]=v; });
+    setProject(np);
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="overflow-auto flex-1">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50/90 dark:bg-gray-700/90 text-gray-500 dark:text-gray-300 font-semibold border-b border-gray-200 dark:border-gray-600 sticky top-0 backdrop-blur z-10 text-[10px] uppercase tracking-wider">
+            <tr>
+              <th className="px-6 py-3 w-64">{t.taskTitle}</th>
+              <th className="px-4 py-3 w-32">{t.planStart}</th>
+              <th className="px-4 py-3 w-32">{t.planEnd}</th>
+              <th className="px-4 py-3 w-32 text-blue-600 dark:text-blue-400">{t.actStart}</th>
+              <th className="px-4 py-3 w-32 text-blue-600 dark:text-blue-400">{t.actEnd}</th>
+              <th className="px-4 py-3 w-40">{t.assignee}</th>
+              <th className="px-4 py-3 w-32">{t.attachments}</th>
+              <th className="px-4 py-3">Notes</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+            {visible.map((t: any) => (
+              <tr key={t.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/20 transition-colors group">
+                <td className="px-6 py-2">
+                  <div className="flex items-center" style={{ paddingLeft: `${t.level * 20}px` }}>
+                    <button onClick={() => { const s = new Set(expandedIds); s.has(t.id)?s.delete(t.id):s.add(t.id); setExpandedIds(new Set(s)); }} className={`mr-2 text-gray-400 hover:text-gray-600 ${!t.children.length && "invisible"}`}>
+                      {expandedIds.has(t.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <span className="font-medium text-gray-700 dark:text-gray-200">{t.title}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-2"><input type="date" className="bg-transparent border-0 text-gray-600 dark:text-gray-400 focus:ring-0 p-0 text-xs font-mono" value={t.start_date.split("T")[0]} onChange={(e) => update(t.id, "start_date", e.target.value)} /></td>
+                <td className="px-4 py-2"><input type="date" className="bg-transparent border-0 text-gray-600 dark:text-gray-400 focus:ring-0 p-0 text-xs font-mono" value={t.end_date.split("T")[0]} onChange={(e) => update(t.id, "end_date", e.target.value)} /></td>
+                <td className="px-4 py-2 bg-blue-50/20 dark:bg-blue-900/20"><input type="date" className="bg-transparent border-0 text-blue-800 dark:text-blue-300 focus:ring-0 p-0 text-xs font-mono font-medium" value={t.actual_start_date?.split("T")[0] || ""} onChange={(e) => update(t.id, "actual_start_date", e.target.value)} /></td>
+                <td className="px-4 py-2 bg-blue-50/20 dark:bg-blue-900/20"><input type="date" className="bg-transparent border-0 text-blue-800 dark:text-blue-300 focus:ring-0 p-0 text-xs font-mono font-medium" value={t.actual_end_date?.split("T")[0] || ""} onChange={(e) => update(t.id, "actual_end_date", e.target.value)} /></td>
+                <td className="px-4 py-2"><div className="flex items-center gap-2 text-gray-600 dark:text-gray-400"><Avatar name={t.assignee} />{t.assignee || "Unassigned"}</div></td>
+                <td className="px-4 py-2">
+                   <div className="flex items-center gap-2">
+                      {t.attachments && t.attachments.length > 0 ? (
+                        <span className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600">
+                           <Paperclip size={10} className="text-gray-400"/> {t.attachments.length}
+                        </span>
+                      ) : <span className="text-xs text-gray-300">-</span>}
+                      <button className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30"><Upload size={14} /></button>
+                   </div>
+                </td>
+                <td className="px-4 py-2"><input type="text" className="w-full bg-transparent border-0 placeholder-gray-300 dark:placeholder-gray-600 focus:ring-0 p-0 text-sm truncate text-gray-700 dark:text-gray-300" placeholder="..." value={t.remarks || ""} onChange={(e) => update(t.id, "remarks", e.target.value)} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const ProjectFilesPage = ({ projects, onPreviewFile }: { projects: Project[], onPreviewFile: (file: string) => void }) => {
+  const [openedProjectId, setOpenedProjectId] = useState<number | null>(null);
+  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const { t } = useConfig();
+  const ITEMS_PER_PAGE = 10;
+
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  }, [projects, search]);
+
+  const paginatedProjects = useMemo(() => {
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return filteredProjects.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredProjects, page]);
+
+  const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
+
+  const openedProject = useMemo(() => projects.find(p => p.id === openedProjectId), [projects, openedProjectId]);
+  const projectFiles = useMemo(() => {
+    if (!openedProject) return [];
+    return openedProject.columns.flatMap(c => 
+      c.tasks.filter(t => t.attachments?.length).flatMap(t => 
+        t.attachments!.map(file => ({
+           id: `${t.id}-${file}`,
+           name: file,
+           task: t.title,
+           date: t.start_date
+        }))
+      )
+    );
+  }, [openedProject]);
+
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    const newSet = new Set(selectedFiles);
+    newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+    setSelectedFiles(newSet);
+  };
+
+  const handleBatchDownload = () => {
+    alert(`Downloading ${selectedFiles.size} files... (Mock)`);
+    setSelectedFiles(new Set());
+  };
+  
+  const handleUpload = () => {
+      alert("Upload functionality would open a file picker here.");
+  };
+
+  if (!openedProject) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{t.projectFiles}</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Browse files organized by project folders.</p>
+          </div>
+          <div className="flex items-center gap-3">
+             <div className="relative">
+                <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+                <input 
+                  type="text" 
+                  placeholder={t.search} 
+                  className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  value={search}
+                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                />
+             </div>
+             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1 flex shadow-sm">
+                <button onClick={() => setView("grid")} className={`p-2 rounded-md transition-all ${view === "grid" ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}><LayoutGrid size={18} /></button>
+                <button onClick={() => setView("list")} className={`p-2 rounded-md transition-all ${view === "list" ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}><List size={18} /></button>
+             </div>
+          </div>
+        </div>
+
+        {filteredProjects.length === 0 ? <div className="text-center py-20 text-gray-400">{t.noFiles}</div> : (
+          view === 'grid' ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+              {paginatedProjects.map(p => (
+                <div key={p.id} onClick={() => setOpenedProjectId(p.id)} className="group cursor-pointer">
+                   <div className="aspect-square bg-blue-50 dark:bg-blue-900/20 rounded-2xl border-2 border-blue-100 dark:border-blue-900 flex items-center justify-center mb-3 group-hover:border-blue-400 dark:group-hover:border-blue-500 group-hover:shadow-lg transition-all relative overflow-hidden">
+                      <div className="absolute inset-0 bg-blue-200 dark:bg-blue-800 opacity-0 group-hover:opacity-20 transition-opacity"/>
+                      <Folder size={64} className="text-blue-400 dark:text-blue-600 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors" fill="currentColor" fillOpacity={0.2} />
+                   </div>
+                   <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-center truncate px-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">{p.name}</h3>
+                   <p className="text-xs text-gray-400 text-center">{new Date(p.created_at).getFullYear()}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+               {paginatedProjects.map(p => (
+                 <div key={p.id} onClick={() => setOpenedProjectId(p.id)} className="flex items-center p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-blue-50/30 dark:hover:bg-blue-900/20 cursor-pointer transition-colors group">
+                    <Folder className="text-blue-400 mr-4 fill-current opacity-50" size={24} />
+                    <span className="font-medium text-gray-800 dark:text-gray-200 flex-1">{p.name}</span>
+                    <span className="text-sm text-gray-400 mr-4">{new Date(p.created_at).toLocaleDateString()}</span>
+                    <ChevronRight size={16} className="text-gray-300 dark:text-gray-600 group-hover:text-blue-500"/>
+                 </div>
+               ))}
+            </div>
+          )
+        )}
+        
+        {totalPages > 1 && (
+          <div className="flex justify-center mt-8 gap-2">
+             <button disabled={page===1} onClick={() => setPage(p => p-1)} className="px-3 py-1 rounded border dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-600 dark:text-gray-400">Prev</button>
+             <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">Page {page} of {totalPages}</span>
+             <button disabled={page===totalPages} onClick={() => setPage(p => p+1)} className="px-3 py-1 rounded border dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-600 dark:text-gray-400">Next</button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-6xl mx-auto">
+      <div className="flex items-center mb-8 gap-4">
+        <button onClick={() => setOpenedProjectId(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400 transition-colors"><ArrowLeft size={24}/></button>
+        <div>
+           <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-1">
+              <span onClick={() => setOpenedProjectId(null)} className="cursor-pointer hover:underline">{t.allProjects}</span> / <span>{openedProject.name}</span>
+           </div>
+           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{t.files}</h1>
+        </div>
+        <div className="flex-1 text-right flex justify-end gap-3">
+           <button onClick={handleUpload} className="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2.5 rounded-lg font-medium inline-flex items-center gap-2 shadow-sm transition-colors">
+             <Upload size={18} /> {t.upload}
+           </button>
+           <button 
+             onClick={handleBatchDownload} 
+             disabled={selectedFiles.size === 0}
+             className={`px-4 py-2.5 rounded-lg font-medium inline-flex items-center gap-2 shadow-sm transition-colors ${selectedFiles.size > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'}`}
+           >
+             <Download size={18} /> {t.downloadSelected} ({selectedFiles.size})
+           </button>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+        <table className="w-full text-sm text-left">
+           <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-500 dark:text-gray-400 font-semibold border-b border-gray-200 dark:border-gray-700">
+              <tr>
+                <th className="px-6 py-3 w-10">
+                  <input type="checkbox" 
+                    onChange={(e) => setSelectedFiles(e.target.checked ? new Set(projectFiles.map(f => f.id)) : new Set())}
+                    checked={selectedFiles.size === projectFiles.length && projectFiles.length > 0}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                </th>
+                <th className="px-6 py-3">File Name</th>
+                <th className="px-6 py-3">Related Task</th>
+                <th className="px-6 py-3">Date</th>
+                <th className="px-6 py-3 text-right">Actions</th>
+              </tr>
+           </thead>
+           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {projectFiles.map(file => (
+                <tr key={file.id} className={`hover:bg-blue-50/30 dark:hover:bg-blue-900/20 transition-colors group ${selectedFiles.has(file.id) ? 'bg-blue-50/30 dark:bg-blue-900/20' : ''}`}>
+                  <td className="px-6 py-4"><input type="checkbox" checked={selectedFiles.has(file.id)} onChange={() => toggleSelect(file.id)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" /></td>
+                  <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-200 flex items-center gap-2">
+                    <FileDigit size={16} className="text-blue-500" /> {file.name}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500 dark:text-gray-400">{file.task}</td>
+                  <td className="px-6 py-4 text-gray-400 font-mono text-xs">{new Date(file.date).toLocaleDateString()}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => onPreviewFile(file.name)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Preview"><Eye size={16}/></button>
+                      <button className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded" title="Download"><Download size={16}/></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {projectFiles.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-12 text-gray-400">{t.noFiles}</td></tr>
+              )}
+           </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// 5.1 Project Board Page
+const ProjectBoardPage = ({ project, setProject, goBack, onPreviewFile }: { project: Project, setProject: any, goBack: () => void, onPreviewFile: (f:string) => void }) => {
+  const [view, setView] = useState<'kanban'|'gantt'|'table'>('kanban');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [targetColumnId, setTargetColumnId] = useState<number | null>(null);
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", start_date: "", end_date: "", actual_start_date: "", actual_end_date: "", parent_id: "", related_task_id: "" });
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [projectSettings, setProjectSettings] = useState({ name: project.name, description: project.description, status: project.status });
+  const { t } = useConfig();
+  const allTasks = useMemo(() => project.columns.flatMap(c => c.tasks), [project]);
+
+  const handleOpenCreateModal = (colId?: number) => {
+    setTargetColumnId(colId || project.columns[0].id);
+    setNewTask({ title: "", description: "", priority: "medium", start_date: "", end_date: "", actual_start_date: "", actual_end_date: "", parent_id: "", related_task_id: "" });
+    setShowCreateModal(true);
+  };
+  const create = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetColumnId) return;
+    const newProject = { ...project };
+    const col = newProject.columns.find(c => c.id === targetColumnId);
+    if (col) {
+      col.tasks.push({
+        id: Date.now(),
+        ...newTask,
+        priority: newTask.priority as Priority,
+        progress: 0,
+        parent_id: newTask.parent_id ? parseInt(newTask.parent_id) : undefined,
+        related_task_id: newTask.related_task_id ? parseInt(newTask.related_task_id) : undefined,
+        attachments: []
+      } as Task);
+      setProject(newProject);
+    }
+    setShowCreateModal(false);
+  };
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTask) return;
+    const newProject = { ...project };
+    newProject.columns.forEach(col => {
+      const idx = col.tasks.findIndex(t => t.id === editingTask.id);
+      if (idx > -1) col.tasks[idx] = { ...editingTask };
+    });
+    setProject(newProject);
+    setEditingTask(null);
+  };
+  const handleDeleteTask = () => {
+    if (!editingTask) return;
+    if (!confirm("Are you sure you want to delete this task?")) return;
+    const newProject = { ...project };
+    newProject.columns.forEach(col => {
+      col.tasks = col.tasks.filter(t => t.id !== editingTask.id);
+    });
+    setProject(newProject);
+    setEditingTask(null);
+  };
+  const handleSaveProjectSettings = (e: React.FormEvent) => {
+      e.preventDefault();
+      const updatedProject = { ...project, ...projectSettings };
+      setProject(updatedProject);
+      setShowSettingsModal(false);
+      if (projectSettings.status === 'inactive') {
+          goBack();
+      }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center mb-6 flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-medium text-gray-400 mb-1 uppercase tracking-wide">
+            <button onClick={goBack} className="hover:text-blue-600 transition-colors">{t.projects}</button> / <span>{project.name}</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{project.name}</h1>
+        </div>
+        <div className="flex items-center gap-4">
+          <button onClick={() => { setProjectSettings({ name: project.name, description: project.description, status: project.status }); setShowSettingsModal(true); }} className="p-2 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="Project Settings"><Settings size={20} /></button>
+          <div className="bg-gray-100 dark:bg-gray-800 p-1 rounded-lg flex border border-gray-200 dark:border-gray-700">
+            {[ { id: 'kanban', icon: Kanban, label: 'Board' }, { id: 'gantt', icon: Calendar, label: 'Gantt' }, { id: 'table', icon: TableIcon, label: 'Table' } ].map(v => (
+              <button key={v.id} onClick={() => setView(v.id as any)} className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${view === v.id ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}><v.icon size={16} /> {v.label}</button>
+            ))}
+          </div>
+          <button onClick={() => handleOpenCreateModal()} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-lg shadow-blue-500/20 transition-all hover:scale-105 active:scale-95"><Plus size={16} /> {t.createTask}</button>
+        </div>
+      </div>
+      <div className="flex-1 min-h-0">
+        {view === 'kanban' && <KanbanBoard project={project} setProject={setProject} onAddTask={handleOpenCreateModal} onEditTask={setEditingTask} />}
+        {view === 'gantt' && <GanttView project={project} setProject={setProject} onPreviewFile={onPreviewFile} onEditTask={setEditingTask} />}
+        {view === 'table' && <TableView project={project} setProject={setProject} />}
+      </div>
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-gray-100"><Settings size={20}/> {t.settings}</h2><button onClick={() => setShowSettingsModal(false)}><X size={20} className="text-gray-400"/></button></div>
+                <form onSubmit={handleSaveProjectSettings} className="space-y-4">
+                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Project Name</label><input className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" value={projectSettings.name} onChange={e => setProjectSettings({...projectSettings, name: e.target.value})} required /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label><textarea className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" rows={3} value={projectSettings.description} onChange={e => setProjectSettings({...projectSettings, description: e.target.value})} /></div>
+                    <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={projectSettings.status} onChange={e => setProjectSettings({...projectSettings, status: e.target.value as any})}><option value="active">{t.active}</option><option value="inactive">{t.inactive}</option></select><p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Inactive projects are moved to Archives and hidden from Dashboard.</p></div>
+                    <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={() => setShowSettingsModal(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t.cancel}</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{t.save}</button></div>
+                </form>
+            </div>
+        </div>
+      )}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">{t.createTask}</h2><button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button></div>
+            <form onSubmit={create} className="space-y-4">
+              <input className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Task Title" value={newTask.title} onChange={e=>setNewTask({...newTask, title:e.target.value})} required />
+              <div className="grid grid-cols-2 gap-4">
+                 <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.priority}</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm" value={newTask.priority} onChange={e=>setNewTask({...newTask, priority:e.target.value})}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+                 <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.parentTask}</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm" value={newTask.parent_id} onChange={e=>setNewTask({...newTask, parent_id:e.target.value})}><option value="">None</option>{allTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
+                 <div className="col-span-2"><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.nextTask}</label><select className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm" value={newTask.related_task_id} onChange={e=>setNewTask({...newTask, related_task_id:e.target.value})}><option value="">None</option>{allTasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 border-t border-gray-100 dark:border-gray-700 pt-4">
+                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.planStart}</label><input type="datetime-local" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm" onChange={e=>setNewTask({...newTask, start_date: new Date(e.target.value).toISOString()})} /></div>
+                <div><label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{t.planEnd}</label><input type="datetime-local" className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm" onChange={e=>setNewTask({...newTask, end_date: new Date(e.target.value).toISOString()})} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 bg-blue-50/50 dark:bg-blue-900/10 p-3 rounded-lg border border-blue-100 dark:border-blue-900">
+                <div><label className="block text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">{t.actStart}</label><input type="datetime-local" className="w-full border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" onChange={e=>setNewTask({...newTask, actual_start_date: new Date(e.target.value).toISOString()})} /></div>
+                <div><label className="block text-xs font-medium text-blue-600 dark:text-blue-400 mb-1">{t.actEnd}</label><input type="datetime-local" className="w-full border border-blue-200 dark:border-blue-800 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" onChange={e=>setNewTask({...newTask, actual_end_date: new Date(e.target.value).toISOString()})} /></div>
+              </div>
+              <textarea className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" placeholder={t.description} rows={3} value={newTask.description} onChange={e=>setNewTask({...newTask, description:e.target.value})} />
+              <div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t.cancel}</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{t.createTask}</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+      {editingTask && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-2xl shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
+             <div className="flex justify-between items-start mb-6">
+                <div><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Task #{editingTask.id}</span><input className="block text-2xl font-bold text-gray-900 dark:text-gray-100 border-b border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-blue-500 outline-none w-full bg-transparent" value={editingTask.title} onChange={e => setEditingTask({...editingTask, title: e.target.value})} /></div>
+                <button onClick={() => setEditingTask(null)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={24}/></button>
+             </div>
+             <form onSubmit={handleSaveEdit} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                   <div className="space-y-4">
+                      <div><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t.description}</label><textarea className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none min-h-[100px]" value={editingTask.description} onChange={e => setEditingTask({...editingTask, description: e.target.value})} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                         <div><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t.priority}</label><select className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.priority} onChange={e => setEditingTask({...editingTask, priority: e.target.value as any})}><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></div>
+                         <div><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t.assignee}</label><input className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.assignee || ""} onChange={e => setEditingTask({...editingTask, assignee: e.target.value})} placeholder="Unassigned" /></div>
+                         <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t.nextTask}</label><select className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.related_task_id || ""} onChange={e => setEditingTask({...editingTask, related_task_id: e.target.value ? parseInt(e.target.value) : undefined})}><option value="">None</option>{allTasks.filter(t => t.id !== editingTask.id).map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select></div>
+                      </div>
+                   </div>
+                   <div className="space-y-4 bg-gray-50 dark:bg-gray-900/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
+                      <div>
+                        <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2"><CalendarIcon size={14}/> Timeline</h4>
+                        <div className="space-y-3">
+                           <div className="grid grid-cols-2 gap-2">
+                              <div><label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-1">{t.planStart}</label><input type="datetime-local" className="w-full border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.start_date?.slice(0,16)} onChange={e => setEditingTask({...editingTask, start_date: new Date(e.target.value).toISOString()})}/></div>
+                              <div><label className="block text-[10px] text-gray-500 dark:text-gray-400 mb-1">{t.planEnd}</label><input type="datetime-local" className="w-full border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.end_date?.slice(0,16)} onChange={e => setEditingTask({...editingTask, end_date: new Date(e.target.value).toISOString()})}/></div>
+                           </div>
+                           <div className="grid grid-cols-2 gap-2">
+                              <div><label className="block text-[10px] text-blue-600 dark:text-blue-400 mb-1">{t.actStart}</label><input type="datetime-local" className="w-full border border-blue-200 dark:border-blue-800 rounded px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.actual_start_date?.slice(0,16) || ""} onChange={e => setEditingTask({...editingTask, actual_start_date: new Date(e.target.value).toISOString()})}/></div>
+                              <div><label className="block text-[10px] text-blue-600 dark:text-blue-400 mb-1">{t.actEnd}</label><input type="datetime-local" className="w-full border border-blue-200 dark:border-blue-800 rounded px-2 py-1 text-xs bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={editingTask.actual_end_date?.slice(0,16) || ""} onChange={e => setEditingTask({...editingTask, actual_end_date: new Date(e.target.value).toISOString()})}/></div>
+                           </div>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                         <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2"><Paperclip size={14}/> {t.attachments}</h4>
+                         <div className="flex flex-wrap gap-2 mb-2">
+                            {editingTask.attachments?.map((file, i) => (
+                               <span key={i} onClick={() => onPreviewFile(file)} className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 px-2 py-1 rounded-md text-xs flex items-center gap-2 cursor-pointer hover:border-blue-300 dark:hover:border-blue-500 transition-colors text-gray-700 dark:text-gray-300">
+                                  {file} <button type="button" className="text-gray-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); const newAtt = [...(editingTask.attachments || [])]; newAtt.splice(i, 1); setEditingTask({...editingTask, attachments: newAtt}); }}><X size={12}/></button>
+                               </span>
+                            ))}
+                         </div>
+                         <button type="button" className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"><Plus size={12}/> {t.upload} (Mock)</button>
+                      </div>
+                   </div>
+                </div>
+                <div className="flex justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
+                   <button type="button" onClick={handleDeleteTask} className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"><Trash2 size={16}/> {t.delete}</button>
+                   <div className="flex gap-3">
+                      <button type="button" onClick={() => setEditingTask(null)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-sm">{t.cancel}</button>
+                      <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium shadow-sm">{t.save}</button>
+                   </div>
+                </div>
+             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 5.2 Dashboard Page (With Search and Pagination and Report)
+const DashboardPage = ({ projects, openProject, onCreateProject }: { projects: Project[], openProject: (id: number) => void, onCreateProject: (p: any) => void }) => {
+  const [view, setView] = useState<'grid'|'list'>('grid');
+  const [showModal, setShowModal] = useState(false);
+  const [newProject, setNewProject] = useState({ name: "", description: "" });
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const { t } = useConfig();
+  const ITEMS_PER_PAGE = 10;
+  
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportConfig, setReportConfig] = useState<{ start: string, end: string, selected: Set<number> }>({ start: '', end: '', selected: new Set() });
+
+  const getDefaultDates = () => {
+    const today = new Date();
+    const thisThursday = new Date(today);
+    thisThursday.setDate(today.getDate() + (4 + 7 - today.getDay()) % 7);
+    if (thisThursday > today) thisThursday.setDate(thisThursday.getDate() - 7);
+    const lastThursday = new Date(thisThursday);
+    lastThursday.setDate(thisThursday.getDate() - 7);
+    return { start: lastThursday.toISOString().split('T')[0], end: thisThursday.toISOString().split('T')[0] };
+  };
+
+  const openReportModal = () => { setReportConfig({ ...getDefaultDates(), selected: new Set() }); setShowReportModal(true); };
+  const handleInvertSelection = () => {
+      const activeProjects = projects.filter(p => p.status === 'active');
+      const allIds = activeProjects.map(p => p.id);
+      const newSelected = new Set(reportConfig.selected);
+      allIds.forEach(id => { if (newSelected.has(id)) { newSelected.delete(id); } else { newSelected.add(id); } });
+      setReportConfig({ ...reportConfig, selected: newSelected });
+  };
+  const handleGenerateReport = () => { alert(`Generating report for ${reportConfig.selected.size} projects...`); setShowReportModal(false); };
+
+  const filteredProjects = useMemo(() => projects.filter(p => p.status === 'active' && p.name.toLowerCase().includes(search.toLowerCase())), [projects, search]);
+  const paginatedProjects = useMemo(() => { const start = (page - 1) * ITEMS_PER_PAGE; return filteredProjects.slice(start, start + ITEMS_PER_PAGE); }, [filteredProjects, page]);
+  const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
+  const handleCreate = (e: React.FormEvent) => { e.preventDefault(); onCreateProject(newProject); setShowModal(false); setNewProject({ name: "", description: "" }); };
+
+  return (
+    <div>
+      <div className="flex justify-between items-end mb-8">
+        <div><h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{t.dashboard}</h1><p className="text-gray-500 dark:text-gray-400 mt-1">Overview of all your active projects.</p></div>
+        <div className="flex items-center gap-3">
+          <div className="relative"><Search className="absolute left-3 top-2.5 text-gray-400" size={16} /><input type="text" placeholder={t.search} className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /></div>
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1 flex shadow-sm"><button onClick={() => setView("grid")} className={`p-2 rounded-md transition-all ${view === "grid" ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}><LayoutGrid size={18} /></button><button onClick={() => setView("list")} className={`p-2 rounded-md transition-all ${view === "list" ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}><List size={18} /></button></div>
+          <button onClick={openReportModal} className="bg-pink-500 hover:bg-pink-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-md"><FileBarChart size={18} /> {t.weeklyReport}</button>
+          <button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 shadow-sm transition-all hover:shadow-md"><Plus size={18} /> {t.newProject}</button>
+        </div>
+      </div>
+      {filteredProjects.length === 0 ? <div className="text-center py-20 text-gray-400">No active projects found.</div> : (
+        view === "grid" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{paginatedProjects.map(p => (<div key={p.id} onClick={() => openProject(p.id)} className="bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/5 transition-all cursor-pointer group relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity text-blue-500 translate-x-2 group-hover:translate-x-0"><ChevronRight /></div><div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4 group-hover:scale-110 transition-transform"><Briefcase size={24} /></div><h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-2">{p.name}</h3><p className="text-gray-500 dark:text-gray-400 text-sm line-clamp-2 h-10">{p.description}</p><div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center text-xs text-gray-400 font-mono"><span>{new Date(p.created_at).toLocaleDateString()}</span></div></div>))}</div>
+        ) : (
+          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">{paginatedProjects.map(p => (<div key={p.id} onClick={() => openProject(p.id)} className="flex items-center p-4 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-blue-50/30 dark:hover:bg-blue-900/20 cursor-pointer transition-colors group"><div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 mr-4 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"><Briefcase size={20} /></div><div className="flex-1"><h3 className="font-semibold text-gray-900 dark:text-gray-100">{p.name}</h3><p className="text-sm text-gray-500 dark:text-gray-400">{p.description}</p></div><div className="text-sm text-gray-400 font-mono mr-8">{new Date(p.created_at).toLocaleDateString()}</div><ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-blue-500" size={20} /></div>))}</div>
+        )
+      )}
+      {totalPages > 1 && (
+        <div className="flex justify-center mt-8 gap-2"><button disabled={page===1} onClick={() => setPage(p => p-1)} className="px-3 py-1 rounded border dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-600 dark:text-gray-400">Prev</button><span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">Page {page} of {totalPages}</span><button disabled={page===totalPages} onClick={() => setPage(p => p+1)} className="px-3 py-1 rounded border dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-600 dark:text-gray-400">Next</button></div>
+      )}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"><div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200"><h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">{t.newProject}</h2><form onSubmit={handleCreate} className="space-y-4"><input autoFocus className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Project Name" value={newProject.name} onChange={e=>setNewProject({...newProject, name:e.target.value})} required /><textarea className="w-full border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" rows={3} value={newProject.description} onChange={e=>setNewProject({...newProject, description:e.target.value})} /><div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t.cancel}</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{t.newProject}</button></div></form></div></div>
+      )}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"><div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200"><div className="flex justify-between items-center mb-4"><h2 className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-gray-100"><FileBarChart size={24} className="text-pink-500"/> {t.weeklyReport}</h2><button onClick={() => setShowReportModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><X size={20}/></button></div><div className="space-y-4"><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t.startDate}</label><input type="date" className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={reportConfig.start} onChange={e => setReportConfig({...reportConfig, start: e.target.value})} /></div><div><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">{t.endDate}</label><input type="date" className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100" value={reportConfig.end} onChange={e => setReportConfig({...reportConfig, end: e.target.value})} /></div></div><div><div className="flex justify-between items-center mb-2"><label className="block text-xs font-semibold text-gray-500 dark:text-gray-400">{t.selectProjects}</label><button onClick={handleInvertSelection} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">{t.invertSelection}</button></div><div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg p-2 space-y-1">{projects.filter(p => p.status === 'active').map(p => (<label key={p.id} className="flex items-center gap-2 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer"><input type="checkbox" checked={reportConfig.selected.has(p.id)} onChange={() => { const newSet = new Set(reportConfig.selected); newSet.has(p.id) ? newSet.delete(p.id) : newSet.add(p.id); setReportConfig({...reportConfig, selected: newSet}); }} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600" /><span className="text-sm text-gray-700 dark:text-gray-300">{p.name}</span></label>))}</div></div><div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-700"><button onClick={() => setShowReportModal(false)} className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">{t.cancel}</button><button onClick={handleGenerateReport} className="px-6 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg shadow-sm font-medium flex items-center gap-2"><Download size={16}/> {t.generate}</button></div></div></div></div>
+      )}
+    </div>
+  );
+};
+
+// 5.4 Archives Page (Reusing Dashboard Logic but filtered)
+const ArchivesPage = ({ projects, openProject }: { projects: Project[], openProject: (id: number) => void }) => {
+    const [view, setView] = useState<'grid'|'list'>('grid');
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const ITEMS_PER_PAGE = 10;
+    const { t } = useConfig();
+  
+    const filteredProjects = useMemo(() => {
+      return projects.filter(p => p.status === 'inactive' && p.name.toLowerCase().includes(search.toLowerCase()));
+    }, [projects, search]);
+  
+    const paginatedProjects = useMemo(() => {
+      const start = (page - 1) * ITEMS_PER_PAGE;
+      return filteredProjects.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredProjects, page]);
+  
+    const totalPages = Math.ceil(filteredProjects.length / ITEMS_PER_PAGE);
+  
+    return (
+      <div>
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2"><Archive className="text-gray-400"/> {t.archives}</h1>
+            <p className="text-gray-500 dark:text-gray-400 mt-1">Inactive projects.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="relative">
+               <Search className="absolute left-3 top-2.5 text-gray-400" size={16} />
+               <input 
+                 type="text" 
+                 placeholder={t.search} 
+                 className="pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                 value={search}
+                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+               />
+            </div>
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-1 flex shadow-sm">
+              <button onClick={() => setView("grid")} className={`p-2 rounded-md transition-all ${view === "grid" ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}><LayoutGrid size={18} /></button>
+              <button onClick={() => setView("list")} className={`p-2 rounded-md transition-all ${view === "list" ? "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white" : "text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"}`}><List size={18} /></button>
+            </div>
+          </div>
+        </div>
+  
+        {filteredProjects.length === 0 ? <div className="text-center py-20 text-gray-400">No archived projects found.</div> : (
+          view === "grid" ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedProjects.map(p => (
+                <div key={p.id} onClick={() => openProject(p.id)} 
+                     className="bg-gray-50 dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden grayscale hover:grayscale-0">
+                  <div className="w-12 h-12 bg-gray-200 dark:bg-gray-700 rounded-xl flex items-center justify-center text-gray-500 dark:text-gray-400 mb-4">
+                    <Briefcase size={24} />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300 mb-2">{p.name}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm line-clamp-2 h-10">{p.description}</p>
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center text-xs text-gray-400 font-mono">
+                    <span>{new Date(p.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden shadow-sm">
+              {paginatedProjects.map(p => (
+                <div key={p.id} onClick={() => openProject(p.id)} className="flex items-center p-4 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors group grayscale hover:grayscale-0">
+                  <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center text-gray-500 dark:text-gray-400 mr-4"><Briefcase size={20} /></div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-700 dark:text-gray-300">{p.name}</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{p.description}</p>
+                  </div>
+                  <div className="text-sm text-gray-400 font-mono mr-8">{new Date(p.created_at).toLocaleDateString()}</div>
+                  <ChevronRight className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" size={20} />
+                </div>
+              ))}
+            </div>
+          )
+        )}
+  
+        {totalPages > 1 && (
+          <div className="flex justify-center mt-8 gap-2">
+             <button disabled={page===1} onClick={() => setPage(p => p-1)} className="px-3 py-1 rounded border dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-600 dark:text-gray-400">Prev</button>
+             <span className="px-3 py-1 text-sm text-gray-600 dark:text-gray-400">Page {page} of {totalPages}</span>
+             <button disabled={page===totalPages} onClick={() => setPage(p => p+1)} className="px-3 py-1 rounded border dark:border-gray-700 disabled:opacity-50 hover:bg-gray-50 dark:hover:bg-gray-700 text-sm text-gray-600 dark:text-gray-400">Next</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+// 5.3 Login Page
+const LoginPage = ({ onLogin }: { onLogin: () => void }) => {
+  const [isRegister, setIsRegister] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { t } = useConfig();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setTimeout(() => {
+      onLogin(); // Mock login
+      setLoading(false);
+    }, 800);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+      {/* Absolute positioned Config Controls */}
+      <div className="absolute top-4 right-4">
+        <ConfigControls />
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 w-full max-w-md p-8 rounded-2xl shadow-xl border border-white/50 dark:border-gray-700 relative overflow-hidden transition-colors duration-200">
+        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 bg-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30 rotate-3 hover:rotate-6 transition-transform">
+            <Layout className="text-white" size={28} />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">{t.appName}</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">Enterprise Project Management</p>
+        </div>
+
+        <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg mb-6">
+          <button onClick={() => setIsRegister(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${!isRegister ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>{t.login}</button>
+          <button onClick={() => setIsRegister(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${isRegister ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"}`}>{t.register}</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative group">
+            <User className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+            <input type="text" placeholder={t.username} required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600 transition-all text-gray-900 dark:text-gray-100" defaultValue="admin" />
+          </div>
+          
+          {isRegister && (
+            <div className="relative group animate-in fade-in slide-in-from-top-2">
+              <Mail className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+              <input type="email" placeholder={t.email} required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600 transition-all text-gray-900 dark:text-gray-100" />
+            </div>
+          )}
+
+          <div className="relative group">
+            <Lock className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={18} />
+            <input type="password" placeholder={t.password} required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-gray-50 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600 transition-all text-gray-900 dark:text-gray-100" defaultValue="123" />
+          </div>
+
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 disabled:opacity-70 active:scale-[0.98]">
+            {loading ? "Processing..." : (isRegister ? t.register : t.login)}
+            {!loading && <ArrowRight size={16} />}
+          </button>
+        </form>
+        
+        <div className="mt-6 text-center text-xs text-gray-400">
+           <p>{t.previewMode}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- 6. 主应用 (App) ---
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'files' | 'project' | 'archives'>('dashboard');
+  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [projects, setProjects] = useState<Project[]>(INITIAL_DATA);
+  const [previewFile, setPreviewFile] = useState<string | null>(null);
+  const [lang, setLang] = useState<Language>('zh');
+  const [theme, setTheme] = useState<Theme>('light');
+  
+  // App-level user state
+  const [currentUser, setCurrentUser] = useState<UserProfile>({ username: 'Administrator', email: 'admin@example.com' });
+
+  // Handle dark mode class on body
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
+
+  // Mock SetProject to simulate state updates
+  const handleSetProject = (newProject: Project) => {
+    const updatedProjects = projects.map(p => p.id === newProject.id ? newProject : p);
+    setProjects(updatedProjects);
+  };
+  
+  const handleUpdateUser = (updatedData: any) => {
+      setCurrentUser(prev => ({ ...prev, ...updatedData }));
+  };
+
+  const handleCreateProject = (projectData: any) => {
+     const newProject: Project = {
+       id: Date.now(),
+       name: projectData.name,
+       description: projectData.description,
+       status: 'active',
+       created_at: new Date().toISOString(),
+       columns: [
+         { id: Date.now() + 1, name: 'To Do', tasks: [] },
+         { id: Date.now() + 2, name: 'In Progress', tasks: [] },
+         { id: Date.now() + 3, name: 'Done', tasks: [] },
+         { id: Date.now() + 4, name: "Won't Do", tasks: [] }
+       ]
+     };
+     setProjects([...projects, newProject]);
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setCurrentView('dashboard');
+  };
+
+  // Provide Config Context
+  const configValue = {
+    lang, setLang,
+    theme, setTheme,
+    t: TRANSLATIONS[lang]
+  };
+
+  return (
+    <ConfigContext.Provider value={configValue}>
+      {!isLoggedIn ? (
+        <LoginPage onLogin={() => setIsLoggedIn(true)} />
+      ) : (
+        <AppLayout 
+          user={currentUser} 
+          logout={handleLogout} 
+          navigate={(view: any) => {
+             if (view === '/') setCurrentView('dashboard');
+             else console.log('nav', view);
+          }}
+          currentView={currentView}
+          setCurrentView={setCurrentView}
+          onUpdateUser={handleUpdateUser}
+        >
+          {currentView === 'dashboard' && (
+            <DashboardPage 
+              projects={projects} 
+              openProject={(id) => { setSelectedProjectId(id); setCurrentView('project'); }} 
+              onCreateProject={handleCreateProject}
+            />
+          )}
+
+          {currentView === 'archives' && (
+            <ArchivesPage 
+              projects={projects} 
+              openProject={(id) => { setSelectedProjectId(id); setCurrentView('project'); }} 
+            />
+          )}
+
+          {currentView === 'files' && (
+            <ProjectFilesPage projects={projects} onPreviewFile={setPreviewFile} />
+          )}
+          
+          {currentView === 'project' && selectedProjectId && (
+            <ProjectBoardPage 
+              project={projects.find(p => p.id === selectedProjectId)!} 
+              setProject={handleSetProject} 
+              goBack={() => setCurrentView(projects.find(p => p.id === selectedProjectId)?.status === 'active' ? 'dashboard' : 'archives')}
+              onPreviewFile={setPreviewFile}
+            />
+          )}
+
+          <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
+        </AppLayout>
+      )}
+    </ConfigContext.Provider>
+  );
+}
