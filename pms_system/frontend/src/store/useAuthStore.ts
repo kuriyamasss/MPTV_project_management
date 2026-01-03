@@ -1,6 +1,6 @@
-﻿import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { User } from '../types';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { User } from "../types";
 
 interface AuthState {
   token: string | null;
@@ -18,7 +18,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => set({ token: null, user: null }),
     }),
     {
-      name: 'pms-auth-storage',
+      name: "pms-auth-storage",
     }
   )
 );

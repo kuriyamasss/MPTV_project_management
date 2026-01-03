@@ -1,9 +1,9 @@
-﻿import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuthStore } from './store/useAuthStore';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import ProjectBoard from './pages/ProjectBoard';
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuthStore } from "./store/useAuthStore";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import ProjectBoard from "./pages/ProjectBoard";
 
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const token = useAuthStore((state) => state.token);
@@ -35,5 +35,4 @@ const App: React.FC = () => {
     </BrowserRouter>
   );
 };
-
 export default App;

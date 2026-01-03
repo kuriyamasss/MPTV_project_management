@@ -1,4 +1,4 @@
-﻿from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from .database import engine, get_db
 from . import models
@@ -42,7 +42,7 @@ def read_root():
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     try:
-        db.execute(models.Base.metadata.tables['users'].select().limit(1))
+        db.execute(models.Base.metadata.tables["users"].select().limit(1))
         return {"db_status": "connected", "app_status": "healthy"}
     except Exception as e:
         return {"db_status": "error", "error": str(e)}

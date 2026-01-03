@@ -1,4 +1,4 @@
-﻿export interface User {
+export interface User {
   id: number;
   username: string;
   email: string;
@@ -17,7 +17,7 @@ export interface Task {
   column_id: number;
   title: string;
   description?: string;
-  priority: 'high' | 'medium' | 'low';
+  priority: "high" | "medium" | "low";
   start_date?: string;
   end_date?: string;
   progress: number;

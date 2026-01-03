@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 from datetime import datetime
 
@@ -37,7 +37,6 @@ class TaskBase(BaseModel):
     end_date: Optional[datetime] = None
     progress: Optional[float] = 0.0
     parent_id: Optional[int] = None
-    # æ–°å¢žå­—æ®µæ”¯æŒ
     actual_start_date: Optional[datetime] = None
     actual_end_date: Optional[datetime] = None
     remarks: Optional[str] = None

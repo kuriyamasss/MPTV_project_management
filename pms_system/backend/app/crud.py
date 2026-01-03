@@ -1,4 +1,4 @@
-﻿from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session
 from . import models, schemas, auth
 
 def get_user_by_username(db: Session, username: str):
@@ -21,7 +21,7 @@ def create_project(db: Session, project: schemas.ProjectCreate, user_id: int):
     db.commit()
     db.refresh(db_project)
     
-    default_columns = ["å¾…åŠž (To Do)", "è¿›è¡Œä¸­ (In Progress)", "å·²å®Œæˆ (Done)"]
+    default_columns = ["To Do", "In Progress", "Done"]
     for index, name in enumerate(default_columns):
         db_col = models.ProjectColumn(project_id=db_project.id, name=name, order_index=index)
         db.add(db_col)
