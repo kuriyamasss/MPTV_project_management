@@ -16,7 +16,6 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ project, setProject }) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-
     const newProject = { ...project };
     const sColIdx = newProject.columns.findIndex(c => c.id.toString() === source.droppableId);
     const dColIdx = newProject.columns.findIndex(c => c.id.toString() === destination.droppableId);
@@ -24,10 +23,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ project, setProject }) => {
     const dCol = newProject.columns[dColIdx];
     const sTasks = [...sCol.tasks];
     const dTasks = source.droppableId === destination.droppableId ? sTasks : [...dCol.tasks];
-
     const [moved] = sTasks.splice(source.index, 1);
     dTasks.splice(destination.index, 0, moved);
-
     newProject.columns[sColIdx] = { ...sCol, tasks: sTasks };
     if (source.droppableId !== destination.droppableId) {
        newProject.columns[dColIdx] = { ...dCol, tasks: dTasks };
@@ -44,7 +41,6 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ project, setProject }) => {
           <div key={column.id} className="flex-shrink-0 w-80 flex flex-col bg-gray-100/50 rounded-xl border border-gray-200 max-h-full">
             <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50/50 rounded-t-xl">
               <h3 className="font-semibold text-gray-700 text-sm flex items-center gap-2">{column.name}<span className="bg-white text-gray-500 border border-gray-200 text-xs px-2 py-0.5 rounded-full shadow-sm">{column.tasks.length}</span></h3>
-              <button className="text-gray-400 hover:text-gray-600"><MoreHorizontal size={16}/></button>
             </div>
             <Droppable droppableId={column.id.toString()}>
               {(provided, snapshot) => (
@@ -68,7 +64,7 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ project, setProject }) => {
                 </div>
               )}
             </Droppable>
-            <button className="m-2 py-2 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-200/50 rounded-lg transition-colors border border-dashed border-gray-300"><Plus size={14} /> Add Task</button>
+            <button className="m-2 py-2 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-lg"><Plus size={14} /> Add Task</button>
           </div>
         ))}
       </div>

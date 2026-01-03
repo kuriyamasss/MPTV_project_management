@@ -1,71 +1,107 @@
 # =============================================================================
-# MPTV System - Frontend Rebuild (English Only / ASCII Safe Mode)
+# MPTV System - Force Frontend Reset (ASCII/Tailwind Mode)
 # =============================================================================
-# This script rewrites frontend files using PURE ASCII characters.
-# This guarantees NO encoding errors (mojibake) on Windows PowerShell.
+# 1. Stops Docker to unlock files.
+# 2. Deletes 'frontend/src' to remove old Ant Design code.
+# 3. Regenerates fresh Tailwind CSS code (English UI).
 # =============================================================================
 
-$frontend = "pms_system\frontend"
+$root = "pms_system"
+$frontend = "$root\frontend"
 $src = "$frontend\src"
 $components = "$src\components"
 $pages = "$src\pages"
+
+# 1. STOP DOCKER
+Write-Host "🛑 STOPPING DOCKER CONTAINERS..." -ForegroundColor Yellow
+cd $root
+docker-compose down
+cd ..
+
+# 2. DELETE OLD FILES
+Write-Host "🗑️  DELETING OLD SOURCE CODE..." -ForegroundColor Yellow
+if (Test-Path $src) {
+    Remove-Item -Recurse -Force $src
+    Write-Host "✔ Deleted $src" -ForegroundColor Gray
+}
 
 # Helper: Write file with UTF-8 (No BOM)
 function Write-AsciiFile {
     param ([string]$Path, [string]$Content)
     $enc = New-Object System.Text.UTF8Encoding $false
-    # Ensure dir exists
     $dir = [System.IO.Path]::GetDirectoryName($Path)
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    # Write
     [System.IO.File]::WriteAllText($Path, $Content, $enc)
-    Write-Host "Fixed: $Path" -ForegroundColor Gray
+    Write-Host "Created: $Path" -ForegroundColor Gray
 }
 
-Write-Host "STARTING ENGLISH-ONLY REBUILD..." -ForegroundColor Cyan
+Write-Host "🎨 REGENERATING FRONTEND (TAILWIND + ASCII)..." -ForegroundColor Cyan
 
 # -----------------------------------------------------------------------------
-# 1. BUILD CONFIGURATION (tsconfig, vite)
+# 1. CONFIG & DEPENDENCIES
 # -----------------------------------------------------------------------------
 
-$tsconfig = @'
+$pkgJson = @'
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+  "name": "pms-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.1",
+    "axios": "^1.6.5",
+    "zustand": "^4.4.7",
+    "@hello-pangea/dnd": "^16.5.0",
+    "dayjs": "^1.11.10",
+    "lucide-react": "^0.309.0",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.0.8",
+    "tailwindcss": "^3.4.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33"
+  }
 }
 '@
-Write-AsciiFile "$frontend\tsconfig.json" $tsconfig
+Write-AsciiFile "$frontend\package.json" $pkgJson
 
-$tsconfigNode = @'
-{
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+$tailwindConfig = @'
+/** @type {import("tailwindcss").Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
   },
-  "include": ["vite.config.ts"]
+  plugins: [],
 }
 '@
-Write-AsciiFile "$frontend\tsconfig.node.json" $tsconfigNode
+Write-AsciiFile "$frontend\tailwind.config.js" $tailwindConfig
+
+$postcssConfig = @'
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+'@
+Write-AsciiFile "$frontend\postcss.config.js" $postcssConfig
 
 $viteConfig = @'
 import { defineConfig } from "vite"
@@ -86,695 +122,597 @@ export default defineConfig({
 '@
 Write-AsciiFile "$frontend\vite.config.ts" $viteConfig
 
+$tsconfig = @'
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}
+'@
+Write-AsciiFile "$frontend\tsconfig.json" $tsconfig
+
 # -----------------------------------------------------------------------------
-# 2. COMPONENTS (Gantt, Table, Kanban - English UI)
+# 2. SOURCE FILES
 # -----------------------------------------------------------------------------
+
+$indexCss = @'
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+.overflow-x-auto::-webkit-scrollbar { height: 8px; }
+.overflow-x-auto::-webkit-scrollbar-track { background: transparent; }
+.overflow-x-auto::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+'@
+Write-AsciiFile "$src\index.css" $indexCss
+
+$srcMain = @'
+import React from "react"
+import ReactDOM from "react-dom/client"
+import App from "./App.tsx"
+import "./index.css"
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+)
+'@
+Write-AsciiFile "$src\main.tsx" $srcMain
+
+$tsIndex = @'
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  role: string;
+  is_active: boolean;
+}
+export interface Task {
+  id: number;
+  project_id: number;
+  column_id: number;
+  title: string;
+  description?: string;
+  priority: "high" | "medium" | "low";
+  start_date?: string;
+  end_date?: string;
+  progress: number;
+  parent_id?: number;
+  actual_start_date?: string;
+  actual_end_date?: string;
+  remarks?: string;
+  assignee_id?: number; 
+}
+export interface Column {
+  id: number;
+  name: string;
+  order_index: number;
+  tasks: Task[];
+}
+export interface Project {
+  id: number;
+  name: string;
+  description?: string;
+  owner_id: number;
+  created_at: string;
+  columns: Column[];
+}
+'@
+Write-AsciiFile "$src\types\index.ts" $tsIndex
+
+$libApi = @'
+import axios from "axios";
+import { useAuthStore } from "../store/useAuthStore";
+const api = axios.create({ baseURL: "/api", headers: { "Content-Type": "application/json" } });
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+api.interceptors.response.use((r) => r, (e) => {
+  if (e.response?.status === 401) useAuthStore.getState().logout();
+  return Promise.reject(e);
+});
+export default api;
+'@
+Write-AsciiFile "$src\lib\api.ts" $libApi
+
+$storeAuth = @'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { User } from "../types";
+interface AuthState {
+  token: string | null;
+  user: User | null;
+  login: (token: string, user: User) => void;
+  logout: () => void;
+}
+export const useAuthStore = create<AuthState>()(persist((set) => ({
+  token: null, user: null,
+  login: (token, user) => set({ token, user }),
+  logout: () => set({ token: null, user: null }),
+}), { name: "pms-auth-storage" }));
+'@
+Write-AsciiFile "$src\store\useAuthStore.ts" $storeAuth
+
+# -----------------------------------------------------------------------------
+# 3. COMPONENTS
+# -----------------------------------------------------------------------------
+
+$compLayout = @'
+import React from "react";
+import { Layout as LayoutIcon, LogOut, FolderKanban } from "lucide-react";
+import { useAuthStore } from "../store/useAuthStore";
+import { useNavigate, useLocation } from "react-router-dom";
+
+export const AppLayout = ({ children }: { children: React.ReactNode }) => {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const handleLogout = () => { logout(); navigate("/login"); };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex font-sans">
+      <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col fixed h-full z-20">
+        <div className="h-16 flex items-center px-6 border-b border-gray-100">
+          <div className="bg-blue-600 p-1.5 rounded-lg mr-3"><LayoutIcon className="text-white w-5 h-5" /></div>
+          <span className="font-bold text-lg text-gray-800">MPTV System</span>
+        </div>
+        <nav className="p-4 space-y-1 flex-1">
+          <button onClick={() => navigate("/")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${location.pathname === "/" ? "bg-blue-50 text-blue-700 shadow-sm" : "text-gray-600 hover:bg-gray-50"}`}>
+            <FolderKanban size={18} /> My Projects
+          </button>
+        </nav>
+        <div className="p-4 border-t border-gray-100">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gray-50 mb-2">
+            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">{user?.username?.[0]?.toUpperCase() || "U"}</div>
+            <div className="flex-1 overflow-hidden"><p className="text-sm font-medium text-gray-900 truncate">{user?.username}</p></div>
+          </div>
+          <button onClick={handleLogout} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-500 hover:text-red-600 transition-colors"><LogOut size={16} /> Sign Out</button>
+        </div>
+      </aside>
+      <main className="flex-1 ml-64 p-8 overflow-y-auto h-screen">{children}</main>
+    </div>
+  );
+};
+'@
+Write-AsciiFile "$components\Layout.tsx" $compLayout
+
+$compKanban = @'
+import React from "react";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { Project } from "../types";
+import api from "../lib/api";
+import { Clock, MoreHorizontal, User, Plus } from "lucide-react";
+
+interface KanbanBoardProps { project: Project; setProject: any; }
+
+const PriorityTag = ({ p }: { p: string }) => {
+  const styles: any = { high: "bg-red-50 text-red-700 border-red-100", medium: "bg-orange-50 text-orange-700 border-orange-100", low: "bg-green-50 text-green-700 border-green-100" };
+  return <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded border ${styles[p] || styles.medium}`}>{p}</span>;
+};
+
+const KanbanBoard: React.FC<KanbanBoardProps> = ({ project, setProject }) => {
+  const onDragEnd = async (result: any) => {
+    const { destination, source, draggableId } = result;
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+    const newProject = { ...project };
+    const sColIdx = newProject.columns.findIndex(c => c.id.toString() === source.droppableId);
+    const dColIdx = newProject.columns.findIndex(c => c.id.toString() === destination.droppableId);
+    const sCol = newProject.columns[sColIdx];
+    const dCol = newProject.columns[dColIdx];
+    const sTasks = [...sCol.tasks];
+    const dTasks = source.droppableId === destination.droppableId ? sTasks : [...dCol.tasks];
+    const [moved] = sTasks.splice(source.index, 1);
+    dTasks.splice(destination.index, 0, moved);
+    newProject.columns[sColIdx] = { ...sCol, tasks: sTasks };
+    if (source.droppableId !== destination.droppableId) {
+       newProject.columns[dColIdx] = { ...dCol, tasks: dTasks };
+       moved.column_id = parseInt(destination.droppableId);
+    }
+    setProject(newProject);
+    try { await api.put(`/projects/tasks/${draggableId}`, { column_id: parseInt(destination.droppableId) }); } catch {}
+  };
+
+  return (
+    <DragDropContext onDragEnd={onDragEnd}>
+      <div className="flex gap-6 h-full overflow-x-auto pb-4 items-start">
+        {project.columns.map((column) => (
+          <div key={column.id} className="flex-shrink-0 w-80 flex flex-col bg-gray-100/50 rounded-xl border border-gray-200 max-h-full">
+            <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50/50 rounded-t-xl">
+              <h3 className="font-semibold text-gray-700 text-sm flex items-center gap-2">{column.name}<span className="bg-white text-gray-500 border border-gray-200 text-xs px-2 py-0.5 rounded-full shadow-sm">{column.tasks.length}</span></h3>
+            </div>
+            <Droppable droppableId={column.id.toString()}>
+              {(provided, snapshot) => (
+                <div {...provided.droppableProps} ref={provided.innerRef} className={`p-2 flex-1 overflow-y-auto min-h-[150px] space-y-2 transition-colors ${snapshot.isDraggingOver ? "bg-blue-50/50" : ""}`}>
+                  {column.tasks.map((task, index) => (
+                    <Draggable key={task.id} draggableId={task.id.toString()} index={index}>
+                      {(provided, snapshot) => (
+                        <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} style={provided.draggableProps.style}
+                             className={`bg-white p-3 rounded-lg border shadow-sm group hover:shadow-md transition-all ${snapshot.isDragging ? "shadow-lg ring-2 ring-blue-500/20 rotate-1" : "border-gray-200"}`}>
+                          <div className="flex justify-between items-start mb-2"><PriorityTag p={task.priority} /></div>
+                          <h4 className="font-medium text-gray-800 text-sm mb-3 leading-snug">{task.title}</h4>
+                          <div className="flex justify-between items-center pt-2 border-t border-gray-50">
+                            <div className="flex items-center gap-1.5 text-xs text-gray-400"><Clock size={12} />{task.end_date ? new Date(task.end_date).toLocaleDateString() : "--"}</div>
+                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold"><User size={12}/></div>
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
+                  {provided.placeholder}
+                </div>
+              )}
+            </Droppable>
+            <button className="m-2 py-2 flex items-center justify-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 border border-dashed border-gray-300 rounded-lg"><Plus size={14} /> Add Task</button>
+          </div>
+        ))}
+      </div>
+    </DragDropContext>
+  );
+};
+export default KanbanBoard;
+'@
+Write-AsciiFile "$components\KanbanBoard.tsx" $compKanban
 
 $compGantt = @'
 import React, { useState, useMemo, useEffect } from "react";
-import { ChevronDown, ChevronRight, User, Clock } from "lucide-react";
-import { Project, Task } from "../types";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import api from "../lib/api";
-import { message, Empty } from "antd";
-
-interface GanttViewProps {
-  project: Project;
-  setProject: React.Dispatch<React.SetStateAction<Project | null>>;
-}
-
-const buildTaskTree = (tasks: Task[]) => {
-  const taskMap = new Map<number, Task & { children: any[], level: number }>();
-  const roots: any[] = [];
-  tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
-  tasks.forEach(t => {
-    const node = taskMap.get(t.id)!;
-    if (t.parent_id && taskMap.has(t.parent_id)) {
-      const parent = taskMap.get(t.parent_id)!;
-      node.level = parent.level + 1;
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  const flattened: any[] = [];
-  const traverse = (nodes: any[]) => {
-    nodes.forEach(node => {
-      flattened.push(node);
-      if (node.children.length > 0) traverse(node.children);
-    });
-  };
-  traverse(roots);
-  return flattened;
-};
-
-const GanttView: React.FC<GanttViewProps> = ({ project, setProject }) => {
+interface GanttViewProps { project: any; setProject: any; }
+export default function GanttView({ project, setProject }: GanttViewProps) {
   const [zoomLevel, setZoomLevel] = useState<"day" | "week" | "month">("day");
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const [dragState, setDragState] = useState<{
-    taskId: number;
-    type: "move" | "resize-left" | "resize-right";
-    startX: number;
-    originalStart: string;
-    originalEnd: string;
-  } | null>(null);
-
-  useEffect(() => {
-    const allTasks = project.columns.flatMap(c => c.tasks);
-    const parents = new Set(allTasks.filter(t => t.parent_id).map(t => t.parent_id!));
-    setExpandedIds(parents);
-  }, [project.id]);
-
-  const toggleExpand = (id: number) => { 
-    const newSet = new Set(expandedIds); 
-    newSet.has(id) ? newSet.delete(id) : newSet.add(id); 
-    setExpandedIds(newSet); 
+  const [dragState, setDragState] = useState<any>(null);
+  useEffect(() => { setExpandedIds(new Set(project.columns.flatMap((c:any) => c.tasks).filter((t:any) => t.parent_id).map((t:any) => t.parent_id))); }, [project.id]);
+  const buildTaskTree = (tasks: any[]) => {
+    const taskMap = new Map(); const roots: any[] = [];
+    tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
+    tasks.forEach(t => { if(t.parent_id && taskMap.has(t.parent_id)){ taskMap.get(t.parent_id).children.push(taskMap.get(t.id)); taskMap.get(t.id).level = taskMap.get(t.parent_id).level + 1; } else roots.push(taskMap.get(t.id)); });
+    const flat: any[] = []; const traverse = (nodes: any[]) => { nodes.forEach(n => { flat.push(n); if(n.children.length) traverse(n.children); }); }; traverse(roots); return flat;
   };
-
-  const tasks = useMemo(() => {
-    const rawTasks = project.columns.flatMap(c => c.tasks)
-      .filter(t => t.start_date && t.end_date);
-    return buildTaskTree(rawTasks);
-  }, [project]);
-
+  const tasks = useMemo(() => buildTaskTree(project.columns.flatMap((c:any) => c.tasks).filter((t:any) => t.start_date && t.end_date)), [project]);
   const visibleTasks = tasks.filter((t: any) => !t.parent_id || expandedIds.has(t.parent_id));
-
-  const minDateStr = tasks.length > 0 
-    ? tasks.reduce((min: string, t: any) => t.start_date < min ? t.start_date : min, tasks[0].start_date || "") 
-    : new Date().toISOString().split("T")[0];
-  const minDate = new Date(minDateStr); 
-  minDate.setDate(minDate.getDate() - 5);
-
   const config = useMemo(() => {
-    switch(zoomLevel) {
-      case "week": return { colWidth: 20, cols: 90, dayStep: 1, labelStep: 7 }; 
-      case "month": return { colWidth: 10, cols: 120, dayStep: 1, labelStep: 30 }; 
-      case "day": default: return { colWidth: 40, cols: 45, dayStep: 1, labelStep: 1 };
-    }
+    if (zoomLevel === "week") return { colWidth: 24, cols: 90, dayStep: 1, labelStep: 7 };
+    if (zoomLevel === "month") return { colWidth: 12, cols: 120, dayStep: 1, labelStep: 30 };
+    return { colWidth: 48, cols: 45, dayStep: 1, labelStep: 1 };
   }, [zoomLevel]);
-
-  const days = Array.from({ length: config.cols }, (_, i) => { 
-    const d = new Date(minDate); 
-    d.setDate(d.getDate() + i * config.dayStep); 
-    return d; 
-  });
-
-  const getOffsetPixels = (dateStr: string) => { 
-    const d = new Date(dateStr); 
-    const diffDays = (d.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24); 
-    return diffDays * config.colWidth; 
+  const minDate = new Date(); minDate.setDate(minDate.getDate() - 5);
+  const days = Array.from({ length: config.cols }, (_, i) => { const d = new Date(minDate); d.setDate(d.getDate() + i * config.dayStep); return d; });
+  const getOffset = (d: string) => ((new Date(d).getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) * config.colWidth;
+  const getWidth = (s: string, e: string) => Math.max(1, ((new Date(e).getTime() - new Date(s).getTime()) / (1000 * 60 * 60 * 24) + 1)) * config.colWidth;
+  const addDays = (d: string, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x.toISOString(); };
+  const updateTask = async (id: number, pl: any) => {
+    const np = { ...project }; np.columns.forEach((c:any) => { const t = c.tasks.find((x:any) => x.id === id); if(t) Object.assign(t, pl); }); setProject(np);
+    try { await api.put(`/projects/tasks/${id}`, pl); } catch {}
   };
-  const getWidthPixels = (startStr: string, endStr: string) => { 
-    const start = new Date(startStr); 
-    const end = new Date(endStr); 
-    const diffDays = Math.max(1, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1); 
-    return diffDays * config.colWidth; 
-  };
-  const addDays = (dateStr: string, days: number) => {
-    const d = new Date(dateStr);
-    d.setDate(d.getDate() + days);
-    return d.toISOString();
-  };
-
-  const updateTaskData = async (taskId: number, updates: Partial<Task>) => {
-    const newProject = { ...project };
-    let taskFound = false;
-    newProject.columns.forEach(col => {
-      const t = col.tasks.find(t => t.id === taskId);
-      if (t) {
-        Object.assign(t, updates);
-        taskFound = true;
-      }
-    });
-    if (taskFound) setProject(newProject);
-    try {
-        await api.put(`/projects/tasks/${taskId}`, updates);
-    } catch (e) {
-        console.error(e);
-        message.error("Save failed");
-    }
-  };
-
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!dragState) return;
-      e.preventDefault();
-      const deltaX = e.clientX - dragState.startX;
-      const deltaDays = Math.round(deltaX / config.colWidth);
-      if (deltaDays === 0) return;
-
-      if (dragState.type === "move") {
-        updateTaskData(dragState.taskId, {
-            actual_start_date: addDays(dragState.originalStart, deltaDays),
-            actual_end_date: addDays(dragState.originalEnd, deltaDays)
-        });
-      } else if (dragState.type === "resize-left") {
-        const newStart = addDays(dragState.originalStart, deltaDays);
-        if (new Date(newStart) < new Date(dragState.originalEnd)) {
-            updateTaskData(dragState.taskId, { actual_start_date: newStart });
-        }
-      } else if (dragState.type === "resize-right") {
-        const newEnd = addDays(dragState.originalEnd, deltaDays);
-        if (new Date(newEnd) > new Date(dragState.originalStart)) {
-            updateTaskData(dragState.taskId, { actual_end_date: newEnd });
-        }
-      }
+    const move = (e: MouseEvent) => {
+      if(!dragState) return;
+      const dx = Math.round((e.clientX - dragState.sx) / config.colWidth);
+      if(dx === 0) return;
+      if(dragState.type==="move") updateTask(dragState.tid, { actual_start_date: addDays(dragState.os, dx), actual_end_date: addDays(dragState.oe, dx) });
     };
-    const handleMouseUp = () => setDragState(null);
-
-    if (dragState) {
-        window.addEventListener("mousemove", handleMouseMove);
-        window.addEventListener("mouseup", handleMouseUp);
-    }
-    return () => {
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-    };
+    const up = () => setDragState(null);
+    if(dragState) { window.addEventListener("mousemove", move); window.addEventListener("mouseup", up); }
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); }
   }, [dragState, config]);
-
-  const handleDragStart = (e: React.MouseEvent, task: Task, type: "move" | "resize-left" | "resize-right") => {
-    e.stopPropagation(); e.preventDefault();
-    if (!task.actual_start_date || !task.actual_end_date) return;
-    setDragState({
-      taskId: task.id,
-      type,
-      startX: e.clientX,
-      originalStart: task.actual_start_date,
-      originalEnd: task.actual_end_date
-    });
-  };
-
-  if (tasks.length === 0) return <Empty description="No tasks with dates" style={{marginTop: 50}} />;
-
   return (
-    <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "8px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f9fafb" }}>
-        <div style={{ display: "flex", gap: 16, fontSize: 14, color: "#4b5563" }}>
-            <div style={{display:"flex", alignItems:"center", gap:4}}><span style={{width:12, height:12, background:"#e5e7eb", border:"1px solid #d1d5db", borderRadius:2}}></span> Plan</div>
-            <div style={{display:"flex", alignItems:"center", gap:4}}><span style={{width:12, height:12, background:"#3b82f6", borderRadius:2}}></span> Actual (Draggable)</div>
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50/50 flex justify-between items-center">
+        <div className="flex gap-4 text-xs font-medium text-gray-500">
+          <div className="flex items-center gap-2"><span className="w-3 h-3 bg-gray-200 rounded-sm border border-gray-300"></span> Plan</div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 bg-blue-500 rounded-sm"></span> Actual</div>
         </div>
-        <div style={{ display: "flex", border: "1px solid #d1d5db", borderRadius: 6, overflow: "hidden" }}>
-            {["day", "week", "month"].map(mode => (
-                <button key={mode} onClick={() => setZoomLevel(mode as any)} 
-                    style={{ padding: "4px 12px", fontSize: 12, cursor: "pointer", background: zoomLevel===mode ? "#eff6ff" : "#fff", color: zoomLevel===mode ? "#2563eb" : "#6b7280", border: "none", borderRight: "1px solid #d1d5db" }}>
-                    {mode.toUpperCase()}
-                </button>
-            ))}
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          {["day", "week", "month"].map((m: any) => (
+            <button key={m} onClick={() => setZoomLevel(m)} className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-all ${zoomLevel===m ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>{m}</button>
+          ))}
         </div>
       </div>
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ width: 250, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-            <div style={{ height: 40, borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "center", padding: "0 16px", fontWeight: "bold", fontSize: 12, color: "#6b7280" }}>Task Name</div>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-                {visibleTasks.map((task: any) => (
-                    <div key={task.id} style={{ height: 48, display: "flex", alignItems: "center", padding: "0 16px", paddingLeft: 16 + task.level * 16, fontSize: 14, borderBottom: "1px solid transparent", cursor: "pointer" }}
-                         className="hover:bg-gray-50">
-                        <button onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }} 
-                            style={{ marginRight: 4, border: "none", background: "transparent", cursor: "pointer", visibility: task.children.length ? "visible" : "hidden" }}>
-                            {expandedIds.has(task.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.title}</span>
-                    </div>
-                ))}
-            </div>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-64 border-r border-gray-200 flex flex-col bg-white z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+          <div className="h-10 border-b border-gray-100 flex items-center px-4 text-xs font-semibold text-gray-500 bg-gray-50/30">TASK NAME</div>
+          <div className="overflow-y-hidden flex-1">
+            {visibleTasks.map((t: any) => (
+              <div key={t.id} className="h-12 flex items-center px-4 border-b border-gray-50 hover:bg-gray-50 transition-colors text-sm text-gray-700" style={{ paddingLeft: `${16 + t.level * 16}px` }}>
+                <button onClick={() => { const s = new Set(expandedIds); s.has(t.id)?s.delete(t.id):s.add(t.id); setExpandedIds(new Set(s)); }} className={`mr-2 p-0.5 rounded hover:bg-gray-200 text-gray-400 ${!t.children.length && "invisible"}`}>
+                  {expandedIds.has(t.id)?<ChevronDown size={14}/>:<ChevronRight size={14}/>}
+                </button>
+                <span className="truncate">{t.title}</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
-            <div style={{ height: 40, display: "flex", borderBottom: "1px solid #e5e7eb", background: "#f9fafb", position: "sticky", top: 0, zIndex: 10, width: "max-content" }}>
-                {days.map((day, i) => (
-                    <div key={i} style={{ width: config.colWidth, flexShrink: 0, textAlign: "center", borderRight: "1px solid #e5e7eb", paddingTop: 8, fontSize: 12, color: "#6b7280" }}>
-                        {i % config.labelStep === 0 && (zoomLevel === "month" ? `${day.getMonth()+1}` : day.getDate())}
-                    </div>
-                ))}
-            </div>
-            <div style={{ width: "max-content", paddingTop: 8 }}>
-                {visibleTasks.map((task: any) => {
-                    const planLeft = getOffsetPixels(task.start_date);
-                    const planWidth = getWidthPixels(task.start_date, task.end_date);
-                    let actLeft = 0, actWidth = 0;
-                    if (task.actual_start_date) {
-                        actLeft = getOffsetPixels(task.actual_start_date);
-                        actWidth = getWidthPixels(task.actual_start_date, task.actual_end_date || new Date().toISOString());
-                    }
-                    return (
-                        <div key={task.id} style={{ height: 48, position: "relative", borderBottom: "1px solid #f3f4f6", width: "100%" }}>
-                            <div style={{ position: "absolute", inset: 0, display: "flex", pointerEvents: "none" }}>
-                                {days.map((_, i) => <div key={i} style={{ width: config.colWidth, borderRight: "1px solid #f3f4f6", height: "100%" }}></div>)}
-                            </div>
-                            <div style={{ position: "absolute", top: 8, height: 32, background: "rgba(229, 231, 235, 0.5)", border: "1px solid #d1d5db", borderRadius: 4, left: planLeft, width: planWidth }}></div>
-                            {task.actual_start_date && (
-                                <div onMouseDown={(e) => handleDragStart(e, task, "move")}
-                                     style={{ 
-                                        position: "absolute", top: 16, height: 16, 
-                                        left: actLeft, width: Math.max(actWidth, 4), 
-                                        background: task.progress === 100 ? "#22c55e" : "#3b82f6", 
-                                        borderRadius: 2, cursor: "grab", zIndex: 5,
-                                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff"
-                                     }}>
-                                    {actWidth > 30 && `${task.progress}%`}
-                                    <div style={{ position: "absolute", left: 0, width: 4, height: "100%", cursor: "ew-resize" }} 
-                                         onMouseDown={(e) => handleDragStart(e, task, "resize-left")}></div>
-                                    <div style={{ position: "absolute", right: 0, width: 4, height: "100%", cursor: "ew-resize" }} 
-                                         onMouseDown={(e) => handleDragStart(e, task, "resize-right")}></div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
+        <div className="flex-1 overflow-auto relative bg-white">
+          <div className="h-10 flex border-b border-gray-200 sticky top-0 z-20 bg-gray-50/80 backdrop-blur w-max">
+            {days.map((d, i) => (
+              <div key={i} className="flex-shrink-0 border-r border-gray-100/50 flex flex-col justify-center items-center text-[10px] text-gray-400" style={{ width: config.colWidth }}>
+                {i % config.labelStep === 0 && <span className="font-medium text-gray-600">{d.getDate()}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="w-max relative">
+            <div className="absolute inset-0 flex pointer-events-none">{days.map((_, i) => <div key={i} className="border-r border-gray-50 h-full" style={{ width: config.colWidth }}></div>)}</div>
+            {visibleTasks.map((t: any) => {
+                const pl = getOffset(t.start_date); const pw = getWidth(t.start_date, t.end_date);
+                const al = t.actual_start_date ? getOffset(t.actual_start_date) : 0;
+                const aw = t.actual_start_date ? getWidth(t.actual_start_date, t.actual_end_date) : 0;
+                return (
+                  <div key={t.id} className="h-12 relative border-b border-gray-50/50 hover:bg-gray-50/50 w-full group">
+                    <div className="absolute top-3 h-6 bg-gray-100 border border-gray-200 rounded-md" style={{ left: pl, width: pw }}></div>
+                    {t.actual_start_date && (
+                      <div onMouseDown={(e) => setDragState({tid: t.id, type:"move", sx:e.clientX, os:t.actual_start_date, oe:t.actual_end_date})}
+                           className={`absolute top-4 h-4 rounded shadow-sm text-[10px] text-white flex items-center justify-center cursor-grab active:cursor-grabbing hover:brightness-110 transition-all ${t.progress===100?"bg-emerald-500":"bg-blue-600"}`}
+                           style={{ left: al, width: Math.max(aw, 8) }}>
+                        {aw > 30 && `${t.progress}%`}
+                      </div>
+                    )}
+                  </div>
+                );
+            })}
+          </div>
         </div>
       </div>
     </div>
   );
-};
-export default GanttView;
+}
 '@
 Write-AsciiFile "$components\GanttView.tsx" $compGantt
 
 $compTable = @'
 import React, { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { Project, Task } from "../types";
+import { ChevronDown, ChevronRight, User } from "lucide-react";
 import api from "../lib/api";
-import { message } from "antd";
-
-interface TableViewProps {
-  project: Project;
-  setProject: React.Dispatch<React.SetStateAction<Project | null>>;
-}
-
-const buildTaskTree = (tasks: Task[]) => {
-  const taskMap = new Map<number, Task & { children: any[], level: number }>();
-  const roots: any[] = [];
-  tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
-  tasks.forEach(t => {
-    const node = taskMap.get(t.id)!;
-    if (t.parent_id && taskMap.has(t.parent_id)) {
-      const parent = taskMap.get(t.parent_id)!;
-      node.level = parent.level + 1;
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  const flattened: any[] = [];
-  const traverse = (nodes: any[]) => {
-    nodes.forEach(node => {
-      flattened.push(node);
-      if (node.children.length > 0) traverse(node.children);
-    });
-  };
-  traverse(roots);
-  return flattened;
-};
-
-const TableView: React.FC<TableViewProps> = ({ project, setProject }) => {
+interface TableViewProps { project: any; setProject: any; }
+export default function TableView({ project, setProject }: TableViewProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const tasks = useMemo(() => {
-    const allTasks = project.columns.flatMap(c => c.tasks);
-    return buildTaskTree(allTasks);
-  }, [project]);
-  const toggleExpand = (id: number) => { 
-    const newSet = new Set(expandedIds); 
-    newSet.has(id) ? newSet.delete(id) : newSet.add(id); 
-    setExpandedIds(newSet); 
+  const buildTaskTree = (tasks: any[]) => {
+    const taskMap = new Map(); const roots: any[] = [];
+    tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
+    tasks.forEach(t => { if(t.parent_id && taskMap.has(t.parent_id)){ taskMap.get(t.parent_id).children.push(taskMap.get(t.id)); taskMap.get(t.id).level = taskMap.get(t.parent_id).level + 1; } else roots.push(taskMap.get(t.id)); });
+    const flat: any[] = []; const trav = (n: any[]) => n.forEach(x => { flat.push(x); trav(x.children); }); trav(roots); return flat;
   };
-  const updateTask = async (id: number, field: keyof Task, value: any) => {
-    const newProject = { ...project };
-    newProject.columns.forEach(col => {
-        const t = col.tasks.find(t => t.id === id);
-        if (t) (t as any)[field] = value;
-    });
-    setProject(newProject);
-    try {
-        await api.put(`/projects/tasks/${id}`, { [field]: value });
-    } catch {
-        message.error("Save failed");
-    }
+  const tasks = useMemo(() => buildTaskTree(project.columns.flatMap((c:any) => c.tasks)), [project]);
+  const visible = tasks.filter((t: any) => !t.parent_id || expandedIds.has(t.parent_id));
+  const update = async (id: number, f: string, v: any) => {
+    const np = { ...project }; np.columns.forEach((c:any) => { const t = c.tasks.find((x:any) => x.id===id); if(t) (t as any)[f]=v; }); setProject(np);
+    try { await api.put(`/projects/tasks/${id}`, { [f]: v }); } catch {}
   };
-  const isRowVisible = (task: any) => !task.parent_id || expandedIds.has(task.parent_id);
-
   return (
-    <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ overflow: "auto", flex: 1 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-            <thead style={{ background: "#f9fafb", position: "sticky", top: 0, zIndex: 10 }}>
-                <tr>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", minWidth: 200 }}>Task Name</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130 }}>Plan Start</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130 }}>Plan End</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130, color: "#2563eb" }}>Actual Start</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130, color: "#2563eb" }}>Actual End</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 200 }}>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {tasks.map((task: any) => {
-                    if (!isRowVisible(task)) return null;
-                    return (
-                        <tr key={task.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                            <td style={{ padding: "8px 12px" }}>
-                                <div style={{ display: "flex", alignItems: "center", paddingLeft: task.level * 20 }}>
-                                    <button onClick={() => toggleExpand(task.id)} style={{ border: "none", background: "transparent", cursor: "pointer", marginRight: 4, visibility: task.children.length ? "visible" : "hidden" }}>
-                                        {expandedIds.has(task.id) ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
-                                    </button>
-                                    {task.title}
-                                </div>
-                            </td>
-                            <td style={{ padding: 8 }}><input type="date" value={task.start_date ? task.start_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "start_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8 }}><input type="date" value={task.end_date ? task.end_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "end_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8, background: "#eff6ff" }}><input type="date" value={task.actual_start_date ? task.actual_start_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "actual_start_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #bfdbfe", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8, background: "#eff6ff" }}><input type="date" value={task.actual_end_date ? task.actual_end_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "actual_end_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #bfdbfe", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8 }}><input type="text" value={task.remarks || ""} onChange={(e) => updateTask(task.id, "remarks", e.target.value)} placeholder="..." style={{ border: "none", width: "100%", background: "transparent" }} /></td>
-                        </tr>
-                    )
-                })}
-            </tbody>
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="overflow-auto flex-1">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50/80 text-gray-500 font-semibold border-b border-gray-200 sticky top-0 backdrop-blur z-10 text-xs uppercase tracking-wider">
+            <tr>
+              <th className="px-6 py-3 w-64">Task Name</th>
+              <th className="px-4 py-3 w-32">Start Date</th>
+              <th className="px-4 py-3 w-32">End Date</th>
+              <th className="px-4 py-3 w-40">Assignee</th>
+              <th className="px-4 py-3">Notes</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visible.map((t: any) => (
+              <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
+                <td className="px-6 py-2">
+                  <div className="flex items-center" style={{ paddingLeft: `${t.level * 20}px` }}>
+                    <button onClick={() => { const s = new Set(expandedIds); s.has(t.parent_id)?s.delete(t.id):s.add(t.id); setExpandedIds(new Set(s)); }} className={`mr-2 text-gray-400 hover:text-gray-600 ${!t.children.length && "invisible"}`}>
+                      {expandedIds.has(t.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <span className="font-medium text-gray-700">{t.title}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-2"><input type="date" className="bg-transparent border-0 text-gray-600 focus:ring-0 p-0 text-sm font-mono" value={t.start_date?.split("T")[0] || ""} onChange={(e) => update(t.id, "start_date", e.target.value ? new Date(e.target.value).toISOString() : null)} /></td>
+                <td className="px-4 py-2"><input type="date" className="bg-transparent border-0 text-gray-600 focus:ring-0 p-0 text-sm font-mono" value={t.end_date?.split("T")[0] || ""} onChange={(e) => update(t.id, "end_date", e.target.value ? new Date(e.target.value).toISOString() : null)} /></td>
+                <td className="px-4 py-2"><div className="flex items-center gap-2 text-gray-600"><div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px]"><User size={10}/></div>{t.assignee_id || "Unassigned"}</div></td>
+                <td className="px-4 py-2"><input type="text" className="w-full bg-transparent border-0 placeholder-gray-300 focus:ring-0 p-0 text-sm" placeholder="..." value={t.remarks || ""} onChange={(e) => update(t.id, "remarks", e.target.value)} /></td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
     </div>
   );
-};
-export default TableView;
+}
 '@
 Write-AsciiFile "$components\TableView.tsx" $compTable
 
 # -----------------------------------------------------------------------------
-# 3. PAGES (Login, Dashboard, ProjectBoard - English UI)
+# 4. PAGES
 # -----------------------------------------------------------------------------
 
 $pageLogin = @'
 import React, { useState } from "react";
-import { Form, Input, Button, Card, message, Typography, Tabs } from "antd";
-import { UserOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import api from "../lib/api";
 import { useAuthStore } from "../store/useAuthStore";
 import { useNavigate } from "react-router-dom";
+import { Layout, ArrowRight, User, Lock, Mail } from "lucide-react";
 
-const { Title } = Typography;
-
-const Login: React.FC = () => {
+export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
-  const [form] = Form.useForm();
+  const [formData, setFormData] = useState({ username: "", password: "", email: "" });
 
-  const onFinish = async (values: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
       if (isRegister) {
-        await api.post("/users/", {
-          username: values.username,
-          email: values.email,
-          password: values.password
-        });
-        message.success("Registration successful! Please login.");
+        await api.post("/users/", formData);
+        alert("Account created! Please login.");
         setIsRegister(false);
-        form.resetFields();
       } else {
-        const formData = new URLSearchParams();
-        formData.append("username", values.username);
-        formData.append("password", values.password);
-
-        const tokenRes = await api.post("/token", formData, {
-          headers: { "Content-Type": "application/x-www-form-urlencoded" }
-        });
-        const token = tokenRes.data.access_token;
-        const userRes = await api.get("/users/me", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        login(token, userRes.data);
-        message.success("Welcome back " + userRes.data.username);
+        const params = new URLSearchParams();
+        params.append("username", formData.username);
+        params.append("password", formData.password);
+        const { data } = await api.post("/token", params, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        const userRes = await api.get("/users/me", { headers: { Authorization: `Bearer ${data.access_token}` } });
+        login(data.access_token, userRes.data);
         navigate("/");
       }
-    } catch (error: any) {
-      console.error(error);
-      const msg = error.response?.data?.detail || "Action failed";
-      message.error(msg);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { alert("Action failed."); } finally { setLoading(false); }
   };
 
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f0f2f5" }}>
-      <Card style={{ width: 400, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", borderRadius: 8 }} bodyStyle={{ padding: "40px 40px" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Title level={3} style={{ color: "#1890ff", margin: 0 }}>MPTV System</Title>
-          <div style={{ color: "#8c8c8c", marginTop: 8 }}>Project Management</div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-xl border border-white/50">
+        <div className="text-center mb-8">
+          <div className="w-12 h-12 bg-blue-600 rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30"><Layout className="text-white" size={24} /></div>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">MPTV System</h1>
+          <p className="text-gray-500 mt-2 text-sm">Enterprise Project Management</p>
         </div>
-        <Tabs activeKey={isRegister ? "register" : "login"} onChange={(key) => { setIsRegister(key === "register"); form.resetFields(); }} centered
-          items={[ { label: "Login", key: "login" }, { label: "Register", key: "register" } ]} style={{ marginBottom: 24 }} />
-        <Form form={form} name="auth" onFinish={onFinish} layout="vertical" size="large">
-          <Form.Item name="username" rules={[{ required: true, message: "Required" }]}>
-            <Input prefix={<UserOutlined />} placeholder="Username" />
-          </Form.Item>
-          {isRegister && (
-            <Form.Item name="email" rules={[{ required: true, message: "Required", type: "email" }]}>
-              <Input prefix={<MailOutlined />} placeholder="Email" />
-            </Form.Item>
-          )}
-          <Form.Item name="password" rules={[{ required: true, message: "Required" }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" block loading={loading}>
-              {isRegister ? "Register" : "Login"}
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+        <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+          <button onClick={() => setIsRegister(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${!isRegister ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Login</button>
+          <button onClick={() => setIsRegister(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${isRegister ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Register</button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative"><User className="absolute left-3 top-3 text-gray-400" size={18} /><input type="text" placeholder="Username" required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} /></div>
+          {isRegister && <div className="relative animate-in fade-in slide-in-from-top-2"><Mail className="absolute left-3 top-3 text-gray-400" size={18} /><input type="email" placeholder="Email" required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} /></div>}
+          <div className="relative"><Lock className="absolute left-3 top-3 text-gray-400" size={18} /><input type="password" placeholder="Password" required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 disabled:opacity-70">{loading ? "Processing..." : (isRegister ? "Create Account" : "Sign In")}</button>
+        </form>
+      </div>
     </div>
   );
-};
-export default Login;
+}
 '@
 Write-AsciiFile "$pages\Login.tsx" $pageLogin
 
 $pageDashboard = @'
 import React, { useEffect, useState } from "react";
-import { Layout, Card, Button, Row, Col, Typography, Modal, Form, Input, message, Empty, Segmented } from "antd";
-import { PlusOutlined, ProjectOutlined, LogoutOutlined, AppstoreOutlined, BarsOutlined } from "@ant-design/icons";
+import { LayoutGrid, List, Plus, ChevronRight, Folder } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
-import { useAuthStore } from "../store/useAuthStore";
+import { AppLayout } from "../components/Layout";
 import { Project } from "../types";
-
-const { Header, Content } = Layout;
-const { Title, Paragraph } = Typography;
-
-const Dashboard: React.FC = () => {
+export default function Dashboard() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const [showModal, setShowModal] = useState(false);
+  const [newProject, setNewProject] = useState({ name: "", description: "" });
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
-  const [form] = Form.useForm();
-
-  const fetchProjects = async () => {
-    try {
-      const res = await api.get("/projects/");
-      setProjects(res.data);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  useEffect(() => { fetchProjects(); }, []);
-
-  const handleCreateProject = async (values: any) => {
-    try {
-      await api.post("/projects/", values);
-      message.success("Project created");
-      setIsModalOpen(false);
-      form.resetFields();
-      fetchProjects();
-    } catch (error) {
-      message.error("Failed to create project");
-    }
-  };
-
-  const handleLogout = () => { logout(); navigate("/login"); };
-
+  const load = async () => { try { const { data } = await api.get("/projects/"); setProjects(data); } catch {} };
+  useEffect(() => { load(); }, []);
+  const create = async (e: React.FormEvent) => { e.preventDefault(); try { await api.post("/projects/", newProject); setShowModal(false); load(); } catch { alert("Failed"); } };
   return (
-    <Layout style={{ minHeight: "100vh" }}>
-      <Header style={{ background: "#fff", padding: "0 24px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px #f0f1f2" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <ProjectOutlined style={{ fontSize: 24, color: "#1890ff" }} />
-          <Title level={4} style={{ margin: 0 }}>PMS Console</Title>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span>Welcome, {user?.username}</span>
-          <Button icon={<LogoutOutlined />} onClick={handleLogout} danger type="text">Exit</Button>
-        </div>
-      </Header>
-      <Content style={{ padding: "24px 50px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "end", marginBottom: 24 }}>
-          <div>
-            <Title level={3}>My Projects</Title>
-            <Segmented options={[{ label: "Grid", value: "grid", icon: <AppstoreOutlined /> }, { label: "List", value: "list", icon: <BarsOutlined /> }]} value={viewMode} onChange={(v) => setViewMode(v as any)} />
+    <AppLayout>
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-end mb-8">
+          <div><h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard</h1><p className="text-gray-500 mt-1">Overview of all your active projects.</p></div>
+          <div className="flex items-center gap-3">
+            <div className="bg-white border border-gray-200 rounded-lg p-1 flex shadow-sm"><button onClick={() => setView("grid")} className={`p-2 rounded-md transition-all ${view === "grid" ? "bg-gray-100 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}><LayoutGrid size={18} /></button><button onClick={() => setView("list")} className={`p-2 rounded-md transition-all ${view === "list" ? "bg-gray-100 text-gray-900" : "text-gray-400 hover:text-gray-600"}`}><List size={18} /></button></div>
+            <button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 shadow-sm hover:shadow-md"><Plus size={18} /> New Project</button>
           </div>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>New Project</Button>
         </div>
-        {projects.length === 0 ? <Empty description="No projects found" /> : (
-          viewMode === "grid" ? (
-            <Row gutter={[16, 16]}>
-              {projects.map(project => (
-                <Col xs={24} sm={12} md={8} lg={6} key={project.id}>
-                  <Card hoverable title={project.name} extra={<Button type="link" size="small" onClick={() => navigate(`/project/${project.id}`)}>Enter</Button>} onClick={() => navigate(`/project/${project.id}`)}>
-                    <Paragraph ellipsis={{ rows: 2 }}>{project.description || "No description"}</Paragraph>
-                    <div style={{ marginTop: 12, color: "#888", fontSize: 12 }}>Created: {new Date(project.created_at).toLocaleDateString()}</div>
-                  </Card>
-                </Col>
-              ))}
-            </Row>
-          ) : (
-            <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #f0f0f0" }}>
-               {projects.map(project => (
-                 <div key={project.id} onClick={() => navigate(`/project/${project.id}`)} style={{ padding: "16px 24px", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }} className="hover:bg-gray-50">
-                    <div><div style={{ fontWeight: "bold", fontSize: 16 }}>{project.name}</div><div style={{ color: "#666", fontSize: 14 }}>{project.description || "No description"}</div></div>
-                    <div style={{ color: "#999", fontSize: 12 }}>Created: {new Date(project.created_at).toLocaleDateString()}</div>
-                 </div>
-               ))}
-            </div>
-          )
+        {view === "grid" ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{projects.map(p => (<div key={p.id} onClick={() => navigate(`/project/${p.id}`)} className="bg-white p-6 rounded-xl border border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all cursor-pointer group relative overflow-hidden"><div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-4 group-hover:scale-110 transition-transform"><Folder size={24} /></div><h3 className="text-lg font-bold text-gray-900 mb-2">{p.name}</h3><p className="text-gray-500 text-sm line-clamp-2 h-10">{p.description}</p><div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400 font-mono"><span>ID: {p.id}</span><span>{new Date(p.created_at).toLocaleDateString()}</span></div></div>))}</div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">{projects.map(p => (<div key={p.id} onClick={() => navigate(`/project/${p.id}`)} className="flex items-center p-4 border-b border-gray-100 last:border-0 hover:bg-blue-50/50 cursor-pointer transition-colors group"><div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 mr-4 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors"><Folder size={20} /></div><div className="flex-1"><h3 className="font-semibold text-gray-900">{p.name}</h3><p className="text-sm text-gray-500">{p.description}</p></div><div className="text-sm text-gray-400 font-mono mr-8">{new Date(p.created_at).toLocaleDateString()}</div><ChevronRight className="text-gray-300 group-hover:text-blue-500" size={20} /></div>))}</div>
         )}
-      </Content>
-      <Modal title="Create Project" open={isModalOpen} onCancel={() => setIsModalOpen(false)} onOk={form.submit}>
-        <Form form={form} layout="vertical" onFinish={handleCreateProject}>
-          <Form.Item name="name" label="Project Name" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Layout>
+      </div>
+      {showModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"><div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200"><h2 className="text-xl font-bold mb-4">Create Project</h2><form onSubmit={create} className="space-y-4"><input autoFocus className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Project Name" value={newProject.name} onChange={e=>setNewProject({...newProject, name:e.target.value})} required /><textarea className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" rows={3} value={newProject.description} onChange={e=>setNewProject({...newProject, description:e.target.value})} /><div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create</button></div></form></div></div>)}
+    </AppLayout>
   );
-};
-export default Dashboard;
+}
 '@
 Write-AsciiFile "$pages\Dashboard.tsx" $pageDashboard
 
-$pageProjectBoard = @'
+$pageProject = @'
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Layout, Button, Spin, Breadcrumb, message, Modal, Form, Input, Select, DatePicker, Segmented } from "antd";
-import { ArrowLeftOutlined, PlusOutlined, AppstoreOutlined, BarsOutlined, TableOutlined } from "@ant-design/icons";
+import { useParams } from "react-router-dom";
+import { Kanban, Calendar, Table as TableIcon, Plus } from "lucide-react";
 import api from "../lib/api";
+import { AppLayout } from "../components/Layout";
 import { Project } from "../types";
 import KanbanBoard from "../components/KanbanBoard";
 import GanttView from "../components/GanttView";
 import TableView from "../components/TableView";
-
-const { Content, Header } = Layout;
-const { Option } = Select;
-
-const ProjectBoard: React.FC = () => {
+export default function ProjectBoard() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"kanban" | "gantt" | "table">("kanban");
-  const [form] = Form.useForm();
-
-  const fetchProject = async () => {
-    try {
-      const res = await api.get(`/projects/${id}`);
-      setProject(res.data);
-    } catch (error) {
-      message.error("Failed to load project");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchProject(); }, [id]);
-
-  const handleCreateTask = async (values: any) => {
-    if (!project) return;
-    try {
-      const firstColumnId = project.columns[0].id;
-      await api.post(`/projects/${project.id}/tasks/`, {
-        ...values,
-        column_id: firstColumnId,
-        start_date: values.start_date ? values.start_date.toISOString() : null,
-        end_date: values.end_date ? values.end_date.toISOString() : null,
-      });
-      message.success("Task created");
-      setIsModalOpen(false);
-      form.resetFields();
-      fetchProject();
-    } catch (error) {
-      message.error("Failed to create task");
-    }
-  };
-
-  if (loading) return <div style={{textAlign: "center", marginTop: 50}}><Spin size="large" /></div>;
-  if (!project) return <div>Project not found</div>;
-
+  const [view, setView] = useState<"kanban"|"gantt"|"table">("kanban");
+  const [showModal, setShowModal] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", start_date: "", end_date: "" });
+  const load = async () => { try { const { data } = await api.get(`/projects/${id}`); setProject(data); } catch {} };
+  useEffect(() => { load(); }, [id]);
+  const createTask = async (e: React.FormEvent) => { e.preventDefault(); if (!project) return; try { await api.post(`/projects/${project.id}/tasks/`, { ...newTask, column_id: project.columns[0].id }); setShowModal(false); load(); } catch { alert("Failed"); } };
+  if (!project) return <div className="p-8 text-center text-gray-500">Loading...</div>;
   return (
-    <Layout style={{ height: "100vh" }}>
-      <Header style={{ background: "#fff", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #f0f0f0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/")} />
-          <Breadcrumb items={[{ title: "Dashboard" }, { title: project.name }]} />
+    <AppLayout>
+      <div className="flex flex-col h-full">
+        <div className="flex justify-between items-center mb-6 flex-shrink-0">
+          <div><div className="flex items-center gap-2 text-sm text-gray-500 mb-1"><span>Projects</span> / <span>{project.name}</span></div><h1 className="text-2xl font-bold text-gray-900">{project.name}</h1></div>
+          <div className="flex items-center gap-4">
+            <div className="bg-gray-100 p-1 rounded-lg flex">{[ { id: "kanban", icon: Kanban, label: "Board" }, { id: "gantt", icon: Calendar, label: "Gantt" }, { id: "table", icon: TableIcon, label: "List" } ].map(v => (<button key={v.id} onClick={() => setView(v.id as any)} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${view === v.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}><v.icon size={16} /> {v.label}</button>))}</div>
+            <button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm"><Plus size={16} /> New Task</button>
+          </div>
         </div>
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
-          <Segmented
-            options={[
-              { label: "Kanban", value: "kanban", icon: <AppstoreOutlined /> },
-              { label: "Gantt", value: "gantt", icon: <BarsOutlined /> },
-              { label: "Table", value: "table", icon: <TableOutlined /> },
-            ]}
-            value={viewMode}
-            onChange={(value) => setViewMode(value as any)}
-          />
+        <div className="flex-1 min-h-0">
+          {view === "kanban" && <KanbanBoard project={project} setProject={setProject} />}
+          {view === "gantt" && <GanttView project={project} setProject={setProject} />}
+          {view === "table" && <TableView project={project} setProject={setProject} />}
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>
-          New Task
-        </Button>
-      </Header>
-      <Content style={{ padding: "24px", overflow: "hidden" }}>
-        {viewMode === "kanban" && <KanbanBoard project={project} setProject={setProject} />}
-        {viewMode === "gantt" && <GanttView project={project} setProject={setProject} />}
-        {viewMode === "table" && <TableView project={project} setProject={setProject} />}
-      </Content>
-      <Modal title="New Task" open={isModalOpen} onCancel={() => setIsModalOpen(false)} onOk={form.submit}>
-        <Form form={form} layout="vertical" onFinish={handleCreateTask}>
-          <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea />
-          </Form.Item>
-          <Form.Item name="priority" label="Priority" initialValue="medium">
-            <Select>
-              <Option value="high">High</Option>
-              <Option value="medium">Medium</Option>
-              <Option value="low">Low</Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="start_date" label="Plan Start">
-             <DatePicker showTime style={{width: "100%"}} />
-          </Form.Item>
-          <Form.Item name="end_date" label="Plan End">
-             <DatePicker showTime style={{width: "100%"}} />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Layout>
+      </div>
+      {showModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"><div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200"><h2 className="text-xl font-bold mb-4">Create New Task</h2><form onSubmit={createTask} className="space-y-4"><input className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Task Title" value={newTask.title} onChange={e=>setNewTask({...newTask, title:e.target.value})} required /><textarea className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" rows={3} value={newTask.description} onChange={e=>setNewTask({...newTask, description:e.target.value})} /><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label><input type="datetime-local" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onChange={e=>setNewTask({...newTask, start_date: new Date(e.target.value).toISOString()})} /></div><div><label className="block text-xs font-medium text-gray-500 mb-1">Due Date</label><input type="datetime-local" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onChange={e=>setNewTask({...newTask, end_date: new Date(e.target.value).toISOString()})} /></div></div><select className="w-full border border-gray-300 rounded-lg px-4 py-2" value={newTask.priority} onChange={e=>setNewTask({...newTask, priority:e.target.value})}><option value="high">High Priority</option><option value="medium">Medium Priority</option><option value="low">Low Priority</option></select><div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create Task</button></div></form></div></div>)}
+    </AppLayout>
+  );
+}
+'@
+Write-AsciiFile "$pages\ProjectBoard.tsx" $pageProject
+
+$appTsx = @'
+import React from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { useAuthStore } from "./store/useAuthStore";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import ProjectBoard from "./pages/ProjectBoard";
+const ProtectedRoute = ({ children }: { children: JSX.Element }) => { const token = useAuthStore((state) => state.token); if (!token) return <Navigate to="/login" replace />; return children; };
+const App: React.FC = () => {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/project/:id" element={<ProtectedRoute><ProjectBoard /></ProtectedRoute>} />
+      </Routes>
+    </BrowserRouter>
   );
 };
-export default ProjectBoard;
+export default App;
 '@
-Write-AsciiFile "$pages\ProjectBoard.tsx" $pageProjectBoard
+Write-AsciiFile "$src\App.tsx" $appTsx
 
 Write-Host "--------------------------------------------------------" -ForegroundColor Green
-Write-Host "✅ FRONTEND REBUILT (ASCII MODE)" -ForegroundColor Green
-Write-Host "Please restart docker to compile:" -ForegroundColor Yellow
-Write-Host "cd pms_system" -ForegroundColor Yellow
-Write-Host "docker-compose up -d --build" -ForegroundColor Yellow
+Write-Host "✅ FRONTEND FULLY RESET (TAILWIND MODE)" -ForegroundColor Green
+Write-Host "Run these commands:" -ForegroundColor Yellow
+Write-Host "1. cd pms_system" -ForegroundColor Yellow
+Write-Host "2. docker-compose up -d --build" -ForegroundColor Yellow
 Write-Host "--------------------------------------------------------" -ForegroundColor Green

@@ -1,86 +1,55 @@
 import React, { useState } from "react";
-import { Form, Input, Button, Card, message, Typography, Tabs } from "antd";
-import { UserOutlined, LockOutlined, MailOutlined } from "@ant-design/icons";
 import api from "../lib/api";
 import { useAuthStore } from "../store/useAuthStore";
 import { useNavigate } from "react-router-dom";
+import { Layout, ArrowRight, User, Lock, Mail } from "lucide-react";
 
-const { Title } = Typography;
-
-const Login: React.FC = () => {
+export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
-  const [form] = Form.useForm();
+  const [formData, setFormData] = useState({ username: "", password: "", email: "" });
 
-  const onFinish = async (values: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
       if (isRegister) {
-        await api.post("/users/", {
-          username: values.username,
-          email: values.email,
-          password: values.password
-        });
-        message.success("Registration successful! Please login.");
+        await api.post("/users/", formData);
+        alert("Account created! Please login.");
         setIsRegister(false);
-        form.resetFields();
       } else {
-        const formData = new URLSearchParams();
-        formData.append("username", values.username);
-        formData.append("password", values.password);
-
-        const tokenRes = await api.post("/token", formData, {
-          headers: { "Content-Type": "application/x-www-form-urlencoded" }
-        });
-        const token = tokenRes.data.access_token;
-        const userRes = await api.get("/users/me", {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        login(token, userRes.data);
-        message.success("Welcome back " + userRes.data.username);
+        const params = new URLSearchParams();
+        params.append("username", formData.username);
+        params.append("password", formData.password);
+        const { data } = await api.post("/token", params, { headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        const userRes = await api.get("/users/me", { headers: { Authorization: `Bearer ${data.access_token}` } });
+        login(data.access_token, userRes.data);
         navigate("/");
       }
-    } catch (error: any) {
-      console.error(error);
-      const msg = error.response?.data?.detail || "Action failed";
-      message.error(msg);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { alert("Action failed."); } finally { setLoading(false); }
   };
 
   return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#f0f2f5" }}>
-      <Card style={{ width: 400, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", borderRadius: 8 }} bodyStyle={{ padding: "40px 40px" }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Title level={3} style={{ color: "#1890ff", margin: 0 }}>MPTV System</Title>
-          <div style={{ color: "#8c8c8c", marginTop: 8 }}>Project Management</div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-xl border border-white/50">
+        <div className="text-center mb-8">
+          <div className="w-12 h-12 bg-blue-600 rounded-xl mx-auto flex items-center justify-center mb-4 shadow-lg shadow-blue-500/30"><Layout className="text-white" size={24} /></div>
+          <h1 className="text-2xl font-bold text-gray-800 tracking-tight">MPTV System</h1>
+          <p className="text-gray-500 mt-2 text-sm">Enterprise Project Management</p>
         </div>
-        <Tabs activeKey={isRegister ? "register" : "login"} onChange={(key) => { setIsRegister(key === "register"); form.resetFields(); }} centered
-          items={[ { label: "Login", key: "login" }, { label: "Register", key: "register" } ]} style={{ marginBottom: 24 }} />
-        <Form form={form} name="auth" onFinish={onFinish} layout="vertical" size="large">
-          <Form.Item name="username" rules={[{ required: true, message: "Required" }]}>
-            <Input prefix={<UserOutlined />} placeholder="Username" />
-          </Form.Item>
-          {isRegister && (
-            <Form.Item name="email" rules={[{ required: true, message: "Required", type: "email" }]}>
-              <Input prefix={<MailOutlined />} placeholder="Email" />
-            </Form.Item>
-          )}
-          <Form.Item name="password" rules={[{ required: true, message: "Required" }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
-          </Form.Item>
-          <Form.Item style={{ marginBottom: 0 }}>
-            <Button type="primary" htmlType="submit" block loading={loading}>
-              {isRegister ? "Register" : "Login"}
-            </Button>
-          </Form.Item>
-        </Form>
-      </Card>
+        <div className="flex bg-gray-100 p-1 rounded-lg mb-6">
+          <button onClick={() => setIsRegister(false)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${!isRegister ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Login</button>
+          <button onClick={() => setIsRegister(true)} className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${isRegister ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Register</button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative"><User className="absolute left-3 top-3 text-gray-400" size={18} /><input type="text" placeholder="Username" required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} /></div>
+          {isRegister && <div className="relative animate-in fade-in slide-in-from-top-2"><Mail className="absolute left-3 top-3 text-gray-400" size={18} /><input type="email" placeholder="Email" required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} /></div>}
+          <div className="relative"><Lock className="absolute left-3 top-3 text-gray-400" size={18} /><input type="password" placeholder="Password" required className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} /></div>
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 disabled:opacity-70">{loading ? "Processing..." : (isRegister ? "Create Account" : "Sign In")}</button>
+        </form>
+      </div>
     </div>
   );
-};
-export default Login;
+}

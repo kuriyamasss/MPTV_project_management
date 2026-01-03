@@ -1,104 +1,54 @@
 import React, { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
-import { Project, Task } from "../types";
+import { ChevronDown, ChevronRight, User } from "lucide-react";
 import api from "../lib/api";
-import { message } from "antd";
-
-interface TableViewProps {
-  project: Project;
-  setProject: React.Dispatch<React.SetStateAction<Project | null>>;
-}
-
-const buildTaskTree = (tasks: Task[]) => {
-  const taskMap = new Map<number, Task & { children: any[], level: number }>();
-  const roots: any[] = [];
-  tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
-  tasks.forEach(t => {
-    const node = taskMap.get(t.id)!;
-    if (t.parent_id && taskMap.has(t.parent_id)) {
-      const parent = taskMap.get(t.parent_id)!;
-      node.level = parent.level + 1;
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  const flattened: any[] = [];
-  const traverse = (nodes: any[]) => {
-    nodes.forEach(node => {
-      flattened.push(node);
-      if (node.children.length > 0) traverse(node.children);
-    });
-  };
-  traverse(roots);
-  return flattened;
-};
-
-const TableView: React.FC<TableViewProps> = ({ project, setProject }) => {
+interface TableViewProps { project: any; setProject: any; }
+export default function TableView({ project, setProject }: TableViewProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const tasks = useMemo(() => {
-    const allTasks = project.columns.flatMap(c => c.tasks);
-    return buildTaskTree(allTasks);
-  }, [project]);
-  const toggleExpand = (id: number) => { 
-    const newSet = new Set(expandedIds); 
-    newSet.has(id) ? newSet.delete(id) : newSet.add(id); 
-    setExpandedIds(newSet); 
+  const buildTaskTree = (tasks: any[]) => {
+    const taskMap = new Map(); const roots: any[] = [];
+    tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
+    tasks.forEach(t => { if(t.parent_id && taskMap.has(t.parent_id)){ taskMap.get(t.parent_id).children.push(taskMap.get(t.id)); taskMap.get(t.id).level = taskMap.get(t.parent_id).level + 1; } else roots.push(taskMap.get(t.id)); });
+    const flat: any[] = []; const trav = (n: any[]) => n.forEach(x => { flat.push(x); trav(x.children); }); trav(roots); return flat;
   };
-  const updateTask = async (id: number, field: keyof Task, value: any) => {
-    const newProject = { ...project };
-    newProject.columns.forEach(col => {
-        const t = col.tasks.find(t => t.id === id);
-        if (t) (t as any)[field] = value;
-    });
-    setProject(newProject);
-    try {
-        await api.put(`/projects/tasks/${id}`, { [field]: value });
-    } catch {
-        message.error("Save failed");
-    }
+  const tasks = useMemo(() => buildTaskTree(project.columns.flatMap((c:any) => c.tasks)), [project]);
+  const visible = tasks.filter((t: any) => !t.parent_id || expandedIds.has(t.parent_id));
+  const update = async (id: number, f: string, v: any) => {
+    const np = { ...project }; np.columns.forEach((c:any) => { const t = c.tasks.find((x:any) => x.id===id); if(t) (t as any)[f]=v; }); setProject(np);
+    try { await api.put(`/projects/tasks/${id}`, { [f]: v }); } catch {}
   };
-  const isRowVisible = (task: any) => !task.parent_id || expandedIds.has(task.parent_id);
-
   return (
-    <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ overflow: "auto", flex: 1 }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-            <thead style={{ background: "#f9fafb", position: "sticky", top: 0, zIndex: 10 }}>
-                <tr>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", minWidth: 200 }}>Task Name</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130 }}>Plan Start</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130 }}>Plan End</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130, color: "#2563eb" }}>Actual Start</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 130, color: "#2563eb" }}>Actual End</th>
-                    <th style={{ padding: "12px", textAlign: "left", borderBottom: "1px solid #e5e7eb", width: 200 }}>Notes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {tasks.map((task: any) => {
-                    if (!isRowVisible(task)) return null;
-                    return (
-                        <tr key={task.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                            <td style={{ padding: "8px 12px" }}>
-                                <div style={{ display: "flex", alignItems: "center", paddingLeft: task.level * 20 }}>
-                                    <button onClick={() => toggleExpand(task.id)} style={{ border: "none", background: "transparent", cursor: "pointer", marginRight: 4, visibility: task.children.length ? "visible" : "hidden" }}>
-                                        {expandedIds.has(task.id) ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
-                                    </button>
-                                    {task.title}
-                                </div>
-                            </td>
-                            <td style={{ padding: 8 }}><input type="date" value={task.start_date ? task.start_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "start_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8 }}><input type="date" value={task.end_date ? task.end_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "end_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #e5e7eb", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8, background: "#eff6ff" }}><input type="date" value={task.actual_start_date ? task.actual_start_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "actual_start_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #bfdbfe", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8, background: "#eff6ff" }}><input type="date" value={task.actual_end_date ? task.actual_end_date.split("T")[0] : ""} onChange={(e) => updateTask(task.id, "actual_end_date", e.target.value ? new Date(e.target.value).toISOString() : null)} style={{ border: "1px solid #bfdbfe", borderRadius: 4, padding: "4px 8px", width: "100%" }} /></td>
-                            <td style={{ padding: 8 }}><input type="text" value={task.remarks || ""} onChange={(e) => updateTask(task.id, "remarks", e.target.value)} placeholder="..." style={{ border: "none", width: "100%", background: "transparent" }} /></td>
-                        </tr>
-                    )
-                })}
-            </tbody>
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="overflow-auto flex-1">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50/80 text-gray-500 font-semibold border-b border-gray-200 sticky top-0 backdrop-blur z-10 text-xs uppercase tracking-wider">
+            <tr>
+              <th className="px-6 py-3 w-64">Task Name</th>
+              <th className="px-4 py-3 w-32">Start Date</th>
+              <th className="px-4 py-3 w-32">End Date</th>
+              <th className="px-4 py-3 w-40">Assignee</th>
+              <th className="px-4 py-3">Notes</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {visible.map((t: any) => (
+              <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group">
+                <td className="px-6 py-2">
+                  <div className="flex items-center" style={{ paddingLeft: `${t.level * 20}px` }}>
+                    <button onClick={() => { const s = new Set(expandedIds); s.has(t.parent_id)?s.delete(t.id):s.add(t.id); setExpandedIds(new Set(s)); }} className={`mr-2 text-gray-400 hover:text-gray-600 ${!t.children.length && "invisible"}`}>
+                      {expandedIds.has(t.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
+                    <span className="font-medium text-gray-700">{t.title}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-2"><input type="date" className="bg-transparent border-0 text-gray-600 focus:ring-0 p-0 text-sm font-mono" value={t.start_date?.split("T")[0] || ""} onChange={(e) => update(t.id, "start_date", e.target.value ? new Date(e.target.value).toISOString() : null)} /></td>
+                <td className="px-4 py-2"><input type="date" className="bg-transparent border-0 text-gray-600 focus:ring-0 p-0 text-sm font-mono" value={t.end_date?.split("T")[0] || ""} onChange={(e) => update(t.id, "end_date", e.target.value ? new Date(e.target.value).toISOString() : null)} /></td>
+                <td className="px-4 py-2"><div className="flex items-center gap-2 text-gray-600"><div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center text-[10px]"><User size={10}/></div>{t.assignee_id || "Unassigned"}</div></td>
+                <td className="px-4 py-2"><input type="text" className="w-full bg-transparent border-0 placeholder-gray-300 focus:ring-0 p-0 text-sm" placeholder="..." value={t.remarks || ""} onChange={(e) => update(t.id, "remarks", e.target.value)} /></td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
     </div>
   );
-};
-export default TableView;
+}

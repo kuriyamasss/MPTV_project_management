@@ -1,255 +1,102 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { ChevronDown, ChevronRight, User, Clock } from "lucide-react";
-import { Project, Task } from "../types";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import api from "../lib/api";
-import { message, Empty } from "antd";
-
-interface GanttViewProps {
-  project: Project;
-  setProject: React.Dispatch<React.SetStateAction<Project | null>>;
-}
-
-const buildTaskTree = (tasks: Task[]) => {
-  const taskMap = new Map<number, Task & { children: any[], level: number }>();
-  const roots: any[] = [];
-  tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
-  tasks.forEach(t => {
-    const node = taskMap.get(t.id)!;
-    if (t.parent_id && taskMap.has(t.parent_id)) {
-      const parent = taskMap.get(t.parent_id)!;
-      node.level = parent.level + 1;
-      parent.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  });
-  const flattened: any[] = [];
-  const traverse = (nodes: any[]) => {
-    nodes.forEach(node => {
-      flattened.push(node);
-      if (node.children.length > 0) traverse(node.children);
-    });
-  };
-  traverse(roots);
-  return flattened;
-};
-
-const GanttView: React.FC<GanttViewProps> = ({ project, setProject }) => {
+interface GanttViewProps { project: any; setProject: any; }
+export default function GanttView({ project, setProject }: GanttViewProps) {
   const [zoomLevel, setZoomLevel] = useState<"day" | "week" | "month">("day");
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const [dragState, setDragState] = useState<{
-    taskId: number;
-    type: "move" | "resize-left" | "resize-right";
-    startX: number;
-    originalStart: string;
-    originalEnd: string;
-  } | null>(null);
-
-  useEffect(() => {
-    const allTasks = project.columns.flatMap(c => c.tasks);
-    const parents = new Set(allTasks.filter(t => t.parent_id).map(t => t.parent_id!));
-    setExpandedIds(parents);
-  }, [project.id]);
-
-  const toggleExpand = (id: number) => { 
-    const newSet = new Set(expandedIds); 
-    newSet.has(id) ? newSet.delete(id) : newSet.add(id); 
-    setExpandedIds(newSet); 
+  const [dragState, setDragState] = useState<any>(null);
+  useEffect(() => { setExpandedIds(new Set(project.columns.flatMap((c:any) => c.tasks).filter((t:any) => t.parent_id).map((t:any) => t.parent_id))); }, [project.id]);
+  const buildTaskTree = (tasks: any[]) => {
+    const taskMap = new Map(); const roots: any[] = [];
+    tasks.forEach(t => taskMap.set(t.id, { ...t, children: [], level: 0 }));
+    tasks.forEach(t => { if(t.parent_id && taskMap.has(t.parent_id)){ taskMap.get(t.parent_id).children.push(taskMap.get(t.id)); taskMap.get(t.id).level = taskMap.get(t.parent_id).level + 1; } else roots.push(taskMap.get(t.id)); });
+    const flat: any[] = []; const traverse = (nodes: any[]) => { nodes.forEach(n => { flat.push(n); if(n.children.length) traverse(n.children); }); }; traverse(roots); return flat;
   };
-
-  const tasks = useMemo(() => {
-    const rawTasks = project.columns.flatMap(c => c.tasks)
-      .filter(t => t.start_date && t.end_date);
-    return buildTaskTree(rawTasks);
-  }, [project]);
-
+  const tasks = useMemo(() => buildTaskTree(project.columns.flatMap((c:any) => c.tasks).filter((t:any) => t.start_date && t.end_date)), [project]);
   const visibleTasks = tasks.filter((t: any) => !t.parent_id || expandedIds.has(t.parent_id));
-
-  const minDateStr = tasks.length > 0 
-    ? tasks.reduce((min: string, t: any) => t.start_date < min ? t.start_date : min, tasks[0].start_date || "") 
-    : new Date().toISOString().split("T")[0];
-  const minDate = new Date(minDateStr); 
-  minDate.setDate(minDate.getDate() - 5);
-
   const config = useMemo(() => {
-    switch(zoomLevel) {
-      case "week": return { colWidth: 20, cols: 90, dayStep: 1, labelStep: 7 }; 
-      case "month": return { colWidth: 10, cols: 120, dayStep: 1, labelStep: 30 }; 
-      case "day": default: return { colWidth: 40, cols: 45, dayStep: 1, labelStep: 1 };
-    }
+    if (zoomLevel === "week") return { colWidth: 24, cols: 90, dayStep: 1, labelStep: 7 };
+    if (zoomLevel === "month") return { colWidth: 12, cols: 120, dayStep: 1, labelStep: 30 };
+    return { colWidth: 48, cols: 45, dayStep: 1, labelStep: 1 };
   }, [zoomLevel]);
-
-  const days = Array.from({ length: config.cols }, (_, i) => { 
-    const d = new Date(minDate); 
-    d.setDate(d.getDate() + i * config.dayStep); 
-    return d; 
-  });
-
-  const getOffsetPixels = (dateStr: string) => { 
-    const d = new Date(dateStr); 
-    const diffDays = (d.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24); 
-    return diffDays * config.colWidth; 
+  const minDate = new Date(); minDate.setDate(minDate.getDate() - 5);
+  const days = Array.from({ length: config.cols }, (_, i) => { const d = new Date(minDate); d.setDate(d.getDate() + i * config.dayStep); return d; });
+  const getOffset = (d: string) => ((new Date(d).getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) * config.colWidth;
+  const getWidth = (s: string, e: string) => Math.max(1, ((new Date(e).getTime() - new Date(s).getTime()) / (1000 * 60 * 60 * 24) + 1)) * config.colWidth;
+  const addDays = (d: string, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return x.toISOString(); };
+  const updateTask = async (id: number, pl: any) => {
+    const np = { ...project }; np.columns.forEach((c:any) => { const t = c.tasks.find((x:any) => x.id === id); if(t) Object.assign(t, pl); }); setProject(np);
+    try { await api.put(`/projects/tasks/${id}`, pl); } catch {}
   };
-  const getWidthPixels = (startStr: string, endStr: string) => { 
-    const start = new Date(startStr); 
-    const end = new Date(endStr); 
-    const diffDays = Math.max(1, (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1); 
-    return diffDays * config.colWidth; 
-  };
-  const addDays = (dateStr: string, days: number) => {
-    const d = new Date(dateStr);
-    d.setDate(d.getDate() + days);
-    return d.toISOString();
-  };
-
-  const updateTaskData = async (taskId: number, updates: Partial<Task>) => {
-    const newProject = { ...project };
-    let taskFound = false;
-    newProject.columns.forEach(col => {
-      const t = col.tasks.find(t => t.id === taskId);
-      if (t) {
-        Object.assign(t, updates);
-        taskFound = true;
-      }
-    });
-    if (taskFound) setProject(newProject);
-    try {
-        await api.put(`/projects/tasks/${taskId}`, updates);
-    } catch (e) {
-        console.error(e);
-        message.error("Save failed");
-    }
-  };
-
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!dragState) return;
-      e.preventDefault();
-      const deltaX = e.clientX - dragState.startX;
-      const deltaDays = Math.round(deltaX / config.colWidth);
-      if (deltaDays === 0) return;
-
-      if (dragState.type === "move") {
-        updateTaskData(dragState.taskId, {
-            actual_start_date: addDays(dragState.originalStart, deltaDays),
-            actual_end_date: addDays(dragState.originalEnd, deltaDays)
-        });
-      } else if (dragState.type === "resize-left") {
-        const newStart = addDays(dragState.originalStart, deltaDays);
-        if (new Date(newStart) < new Date(dragState.originalEnd)) {
-            updateTaskData(dragState.taskId, { actual_start_date: newStart });
-        }
-      } else if (dragState.type === "resize-right") {
-        const newEnd = addDays(dragState.originalEnd, deltaDays);
-        if (new Date(newEnd) > new Date(dragState.originalStart)) {
-            updateTaskData(dragState.taskId, { actual_end_date: newEnd });
-        }
-      }
+    const move = (e: MouseEvent) => {
+      if(!dragState) return;
+      const dx = Math.round((e.clientX - dragState.sx) / config.colWidth);
+      if(dx === 0) return;
+      if(dragState.type==="move") updateTask(dragState.tid, { actual_start_date: addDays(dragState.os, dx), actual_end_date: addDays(dragState.oe, dx) });
     };
-    const handleMouseUp = () => setDragState(null);
-
-    if (dragState) {
-        window.addEventListener("mousemove", handleMouseMove);
-        window.addEventListener("mouseup", handleMouseUp);
-    }
-    return () => {
-        window.removeEventListener("mousemove", handleMouseMove);
-        window.removeEventListener("mouseup", handleMouseUp);
-    };
+    const up = () => setDragState(null);
+    if(dragState) { window.addEventListener("mousemove", move); window.addEventListener("mouseup", up); }
+    return () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); }
   }, [dragState, config]);
-
-  const handleDragStart = (e: React.MouseEvent, task: Task, type: "move" | "resize-left" | "resize-right") => {
-    e.stopPropagation(); e.preventDefault();
-    if (!task.actual_start_date || !task.actual_end_date) return;
-    setDragState({
-      taskId: task.id,
-      type,
-      startX: e.clientX,
-      originalStart: task.actual_start_date,
-      originalEnd: task.actual_end_date
-    });
-  };
-
-  if (tasks.length === 0) return <Empty description="No tasks with dates" style={{marginTop: 50}} />;
-
   return (
-    <div style={{ background: "#fff", borderRadius: 8, border: "1px solid #e5e7eb", height: "calc(100vh - 200px)", display: "flex", flexDirection: "column" }}>
-      <div style={{ padding: "8px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f9fafb" }}>
-        <div style={{ display: "flex", gap: 16, fontSize: 14, color: "#4b5563" }}>
-            <div style={{display:"flex", alignItems:"center", gap:4}}><span style={{width:12, height:12, background:"#e5e7eb", border:"1px solid #d1d5db", borderRadius:2}}></span> Plan</div>
-            <div style={{display:"flex", alignItems:"center", gap:4}}><span style={{width:12, height:12, background:"#3b82f6", borderRadius:2}}></span> Actual (Draggable)</div>
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col h-full overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50/50 flex justify-between items-center">
+        <div className="flex gap-4 text-xs font-medium text-gray-500">
+          <div className="flex items-center gap-2"><span className="w-3 h-3 bg-gray-200 rounded-sm border border-gray-300"></span> Plan</div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 bg-blue-500 rounded-sm"></span> Actual</div>
         </div>
-        <div style={{ display: "flex", border: "1px solid #d1d5db", borderRadius: 6, overflow: "hidden" }}>
-            {["day", "week", "month"].map(mode => (
-                <button key={mode} onClick={() => setZoomLevel(mode as any)} 
-                    style={{ padding: "4px 12px", fontSize: 12, cursor: "pointer", background: zoomLevel===mode ? "#eff6ff" : "#fff", color: zoomLevel===mode ? "#2563eb" : "#6b7280", border: "none", borderRight: "1px solid #d1d5db" }}>
-                    {mode.toUpperCase()}
-                </button>
-            ))}
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          {["day", "week", "month"].map((m: any) => (
+            <button key={m} onClick={() => setZoomLevel(m)} className={`px-3 py-1 text-xs font-medium rounded-md capitalize transition-all ${zoomLevel===m ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>{m}</button>
+          ))}
         </div>
       </div>
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <div style={{ width: 250, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-            <div style={{ height: 40, borderBottom: "1px solid #e5e7eb", background: "#f9fafb", display: "flex", alignItems: "center", padding: "0 16px", fontWeight: "bold", fontSize: 12, color: "#6b7280" }}>Task Name</div>
-            <div style={{ flex: 1, overflow: "hidden" }}>
-                {visibleTasks.map((task: any) => (
-                    <div key={task.id} style={{ height: 48, display: "flex", alignItems: "center", padding: "0 16px", paddingLeft: 16 + task.level * 16, fontSize: 14, borderBottom: "1px solid transparent", cursor: "pointer" }}
-                         className="hover:bg-gray-50">
-                        <button onClick={(e) => { e.stopPropagation(); toggleExpand(task.id); }} 
-                            style={{ marginRight: 4, border: "none", background: "transparent", cursor: "pointer", visibility: task.children.length ? "visible" : "hidden" }}>
-                            {expandedIds.has(task.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.title}</span>
-                    </div>
-                ))}
-            </div>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="w-64 border-r border-gray-200 flex flex-col bg-white z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
+          <div className="h-10 border-b border-gray-100 flex items-center px-4 text-xs font-semibold text-gray-500 bg-gray-50/30">TASK NAME</div>
+          <div className="overflow-y-hidden flex-1">
+            {visibleTasks.map((t: any) => (
+              <div key={t.id} className="h-12 flex items-center px-4 border-b border-gray-50 hover:bg-gray-50 transition-colors text-sm text-gray-700" style={{ paddingLeft: `${16 + t.level * 16}px` }}>
+                <button onClick={() => { const s = new Set(expandedIds); s.has(t.id)?s.delete(t.id):s.add(t.id); setExpandedIds(new Set(s)); }} className={`mr-2 p-0.5 rounded hover:bg-gray-200 text-gray-400 ${!t.children.length && "invisible"}`}>
+                  {expandedIds.has(t.id)?<ChevronDown size={14}/>:<ChevronRight size={14}/>}
+                </button>
+                <span className="truncate">{t.title}</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
-            <div style={{ height: 40, display: "flex", borderBottom: "1px solid #e5e7eb", background: "#f9fafb", position: "sticky", top: 0, zIndex: 10, width: "max-content" }}>
-                {days.map((day, i) => (
-                    <div key={i} style={{ width: config.colWidth, flexShrink: 0, textAlign: "center", borderRight: "1px solid #e5e7eb", paddingTop: 8, fontSize: 12, color: "#6b7280" }}>
-                        {i % config.labelStep === 0 && (zoomLevel === "month" ? `${day.getMonth()+1}` : day.getDate())}
-                    </div>
-                ))}
-            </div>
-            <div style={{ width: "max-content", paddingTop: 8 }}>
-                {visibleTasks.map((task: any) => {
-                    const planLeft = getOffsetPixels(task.start_date);
-                    const planWidth = getWidthPixels(task.start_date, task.end_date);
-                    let actLeft = 0, actWidth = 0;
-                    if (task.actual_start_date) {
-                        actLeft = getOffsetPixels(task.actual_start_date);
-                        actWidth = getWidthPixels(task.actual_start_date, task.actual_end_date || new Date().toISOString());
-                    }
-                    return (
-                        <div key={task.id} style={{ height: 48, position: "relative", borderBottom: "1px solid #f3f4f6", width: "100%" }}>
-                            <div style={{ position: "absolute", inset: 0, display: "flex", pointerEvents: "none" }}>
-                                {days.map((_, i) => <div key={i} style={{ width: config.colWidth, borderRight: "1px solid #f3f4f6", height: "100%" }}></div>)}
-                            </div>
-                            <div style={{ position: "absolute", top: 8, height: 32, background: "rgba(229, 231, 235, 0.5)", border: "1px solid #d1d5db", borderRadius: 4, left: planLeft, width: planWidth }}></div>
-                            {task.actual_start_date && (
-                                <div onMouseDown={(e) => handleDragStart(e, task, "move")}
-                                     style={{ 
-                                        position: "absolute", top: 16, height: 16, 
-                                        left: actLeft, width: Math.max(actWidth, 4), 
-                                        background: task.progress === 100 ? "#22c55e" : "#3b82f6", 
-                                        borderRadius: 2, cursor: "grab", zIndex: 5,
-                                        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff"
-                                     }}>
-                                    {actWidth > 30 && `${task.progress}%`}
-                                    <div style={{ position: "absolute", left: 0, width: 4, height: "100%", cursor: "ew-resize" }} 
-                                         onMouseDown={(e) => handleDragStart(e, task, "resize-left")}></div>
-                                    <div style={{ position: "absolute", right: 0, width: 4, height: "100%", cursor: "ew-resize" }} 
-                                         onMouseDown={(e) => handleDragStart(e, task, "resize-right")}></div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
+        <div className="flex-1 overflow-auto relative bg-white">
+          <div className="h-10 flex border-b border-gray-200 sticky top-0 z-20 bg-gray-50/80 backdrop-blur w-max">
+            {days.map((d, i) => (
+              <div key={i} className="flex-shrink-0 border-r border-gray-100/50 flex flex-col justify-center items-center text-[10px] text-gray-400" style={{ width: config.colWidth }}>
+                {i % config.labelStep === 0 && <span className="font-medium text-gray-600">{d.getDate()}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="w-max relative">
+            <div className="absolute inset-0 flex pointer-events-none">{days.map((_, i) => <div key={i} className="border-r border-gray-50 h-full" style={{ width: config.colWidth }}></div>)}</div>
+            {visibleTasks.map((t: any) => {
+                const pl = getOffset(t.start_date); const pw = getWidth(t.start_date, t.end_date);
+                const al = t.actual_start_date ? getOffset(t.actual_start_date) : 0;
+                const aw = t.actual_start_date ? getWidth(t.actual_start_date, t.actual_end_date) : 0;
+                return (
+                  <div key={t.id} className="h-12 relative border-b border-gray-50/50 hover:bg-gray-50/50 w-full group">
+                    <div className="absolute top-3 h-6 bg-gray-100 border border-gray-200 rounded-md" style={{ left: pl, width: pw }}></div>
+                    {t.actual_start_date && (
+                      <div onMouseDown={(e) => setDragState({tid: t.id, type:"move", sx:e.clientX, os:t.actual_start_date, oe:t.actual_end_date})}
+                           className={`absolute top-4 h-4 rounded shadow-sm text-[10px] text-white flex items-center justify-center cursor-grab active:cursor-grabbing hover:brightness-110 transition-all ${t.progress===100?"bg-emerald-500":"bg-blue-600"}`}
+                           style={{ left: al, width: Math.max(aw, 8) }}>
+                        {aw > 30 && `${t.progress}%`}
+                      </div>
+                    )}
+                  </div>
+                );
+            })}
+          </div>
         </div>
       </div>
     </div>
   );
-};
-export default GanttView;
+}

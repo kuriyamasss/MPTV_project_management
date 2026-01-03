@@ -1,5 +1,5 @@
 import React from "react";
-import { Layout as LayoutIcon, LogOut, User, FolderKanban } from "lucide-react";
+import { Layout as LayoutIcon, LogOut, FolderKanban } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -7,7 +7,6 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
-
   const handleLogout = () => { logout(); navigate("/login"); };
 
   return (
@@ -15,10 +14,10 @@ export const AppLayout = ({ children }: { children: React.ReactNode }) => {
       <aside className="w-64 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col fixed h-full z-20">
         <div className="h-16 flex items-center px-6 border-b border-gray-100">
           <div className="bg-blue-600 p-1.5 rounded-lg mr-3"><LayoutIcon className="text-white w-5 h-5" /></div>
-          <span className="font-bold text-lg text-gray-800 tracking-tight">MPTV System</span>
+          <span className="font-bold text-lg text-gray-800">MPTV System</span>
         </div>
         <nav className="p-4 space-y-1 flex-1">
-          <button onClick={() => navigate("/")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${location.pathname === "/" ? "bg-blue-50 text-blue-700 shadow-sm" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}>
+          <button onClick={() => navigate("/")} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${location.pathname === "/" ? "bg-blue-50 text-blue-700 shadow-sm" : "text-gray-600 hover:bg-gray-50"}`}>
             <FolderKanban size={18} /> My Projects
           </button>
         </nav>

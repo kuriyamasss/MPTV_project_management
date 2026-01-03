@@ -1,111 +1,39 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { Layout, Button, Spin, Breadcrumb, message, Modal, Form, Input, Select, DatePicker, Segmented } from "antd";
-import { ArrowLeftOutlined, PlusOutlined, AppstoreOutlined, BarsOutlined, TableOutlined } from "@ant-design/icons";
+import { useParams } from "react-router-dom";
+import { Kanban, Calendar, Table as TableIcon, Plus } from "lucide-react";
 import api from "../lib/api";
+import { AppLayout } from "../components/Layout";
 import { Project } from "../types";
 import KanbanBoard from "../components/KanbanBoard";
 import GanttView from "../components/GanttView";
 import TableView from "../components/TableView";
-
-const { Content, Header } = Layout;
-const { Option } = Select;
-
-const ProjectBoard: React.FC = () => {
+export default function ProjectBoard() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<"kanban" | "gantt" | "table">("kanban");
-  const [form] = Form.useForm();
-
-  const fetchProject = async () => {
-    try {
-      const res = await api.get(`/projects/${id}`);
-      setProject(res.data);
-    } catch (error) {
-      message.error("Failed to load project");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchProject(); }, [id]);
-
-  const handleCreateTask = async (values: any) => {
-    if (!project) return;
-    try {
-      const firstColumnId = project.columns[0].id;
-      await api.post(`/projects/${project.id}/tasks/`, {
-        ...values,
-        column_id: firstColumnId,
-        start_date: values.start_date ? values.start_date.toISOString() : null,
-        end_date: values.end_date ? values.end_date.toISOString() : null,
-      });
-      message.success("Task created");
-      setIsModalOpen(false);
-      form.resetFields();
-      fetchProject();
-    } catch (error) {
-      message.error("Failed to create task");
-    }
-  };
-
-  if (loading) return <div style={{textAlign: "center", marginTop: 50}}><Spin size="large" /></div>;
-  if (!project) return <div>Project not found</div>;
-
+  const [view, setView] = useState<"kanban"|"gantt"|"table">("kanban");
+  const [showModal, setShowModal] = useState(false);
+  const [newTask, setNewTask] = useState({ title: "", description: "", priority: "medium", start_date: "", end_date: "" });
+  const load = async () => { try { const { data } = await api.get(`/projects/${id}`); setProject(data); } catch {} };
+  useEffect(() => { load(); }, [id]);
+  const createTask = async (e: React.FormEvent) => { e.preventDefault(); if (!project) return; try { await api.post(`/projects/${project.id}/tasks/`, { ...newTask, column_id: project.columns[0].id }); setShowModal(false); load(); } catch { alert("Failed"); } };
+  if (!project) return <div className="p-8 text-center text-gray-500">Loading...</div>;
   return (
-    <Layout style={{ height: "100vh" }}>
-      <Header style={{ background: "#fff", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #f0f0f0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate("/")} />
-          <Breadcrumb items={[{ title: "Dashboard" }, { title: project.name }]} />
+    <AppLayout>
+      <div className="flex flex-col h-full">
+        <div className="flex justify-between items-center mb-6 flex-shrink-0">
+          <div><div className="flex items-center gap-2 text-sm text-gray-500 mb-1"><span>Projects</span> / <span>{project.name}</span></div><h1 className="text-2xl font-bold text-gray-900">{project.name}</h1></div>
+          <div className="flex items-center gap-4">
+            <div className="bg-gray-100 p-1 rounded-lg flex">{[ { id: "kanban", icon: Kanban, label: "Board" }, { id: "gantt", icon: Calendar, label: "Gantt" }, { id: "table", icon: TableIcon, label: "List" } ].map(v => (<button key={v.id} onClick={() => setView(v.id as any)} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all ${view === v.id ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}><v.icon size={16} /> {v.label}</button>))}</div>
+            <button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm"><Plus size={16} /> New Task</button>
+          </div>
         </div>
-        <div style={{ position: "absolute", left: "50%", transform: "translateX(-50%)" }}>
-          <Segmented
-            options={[
-              { label: "Kanban", value: "kanban", icon: <AppstoreOutlined /> },
-              { label: "Gantt", value: "gantt", icon: <BarsOutlined /> },
-              { label: "Table", value: "table", icon: <TableOutlined /> },
-            ]}
-            value={viewMode}
-            onChange={(value) => setViewMode(value as any)}
-          />
+        <div className="flex-1 min-h-0">
+          {view === "kanban" && <KanbanBoard project={project} setProject={setProject} />}
+          {view === "gantt" && <GanttView project={project} setProject={setProject} />}
+          {view === "table" && <TableView project={project} setProject={setProject} />}
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>
-          New Task
-        </Button>
-      </Header>
-      <Content style={{ padding: "24px", overflow: "hidden" }}>
-        {viewMode === "kanban" && <KanbanBoard project={project} setProject={setProject} />}
-        {viewMode === "gantt" && <GanttView project={project} setProject={setProject} />}
-        {viewMode === "table" && <TableView project={project} setProject={setProject} />}
-      </Content>
-      <Modal title="New Task" open={isModalOpen} onCancel={() => setIsModalOpen(false)} onOk={form.submit}>
-        <Form form={form} layout="vertical" onFinish={handleCreateTask}>
-          <Form.Item name="title" label="Title" rules={[{ required: true }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea />
-          </Form.Item>
-          <Form.Item name="priority" label="Priority" initialValue="medium">
-            <Select>
-              <Option value="high">High</Option>
-              <Option value="medium">Medium</Option>
-              <Option value="low">Low</Option>
-            </Select>
-          </Form.Item>
-          <Form.Item name="start_date" label="Plan Start">
-             <DatePicker showTime style={{width: "100%"}} />
-          </Form.Item>
-          <Form.Item name="end_date" label="Plan End">
-             <DatePicker showTime style={{width: "100%"}} />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </Layout>
+      </div>
+      {showModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center"><div className="bg-white p-6 rounded-xl w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200"><h2 className="text-xl font-bold mb-4">Create New Task</h2><form onSubmit={createTask} className="space-y-4"><input className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Task Title" value={newTask.title} onChange={e=>setNewTask({...newTask, title:e.target.value})} required /><textarea className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Description" rows={3} value={newTask.description} onChange={e=>setNewTask({...newTask, description:e.target.value})} /><div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label><input type="datetime-local" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onChange={e=>setNewTask({...newTask, start_date: new Date(e.target.value).toISOString()})} /></div><div><label className="block text-xs font-medium text-gray-500 mb-1">Due Date</label><input type="datetime-local" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" onChange={e=>setNewTask({...newTask, end_date: new Date(e.target.value).toISOString()})} /></div></div><select className="w-full border border-gray-300 rounded-lg px-4 py-2" value={newTask.priority} onChange={e=>setNewTask({...newTask, priority:e.target.value})}><option value="high">High Priority</option><option value="medium">Medium Priority</option><option value="low">Low Priority</option></select><div className="flex justify-end gap-2 pt-2"><button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create Task</button></div></form></div></div>)}
+    </AppLayout>
   );
-};
-export default ProjectBoard;
+}
